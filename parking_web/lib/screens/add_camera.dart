@@ -73,6 +73,49 @@ class _AddCameraScreenState extends State<AddCameraScreen> {
     }
   }
 
+  // ฟังก์ชันบันทึกข้อมูลกล้องลงฐานข้อมูล
+  Future<void> _saveCamera() async {
+    // ตรวจสอบก่อนว่ากรอกข้อมูลครบไหม
+    if (_nameController.text.isEmpty || _ipController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('กรุณากรอกชื่อกล้องและ IP Address')),
+      );
+      return;
+    }
+
+    try {
+      final response = await http.post(
+        Uri.parse('http://127.0.0.1:8000/add_camera'),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({
+          "camera_name": _nameController.text,
+          "ip": _ipController.text,
+          "username": _userController.text,
+          "password": _passController.text,
+        }),
+      );
+
+      final result = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && result['status'] == 'success') {
+        // บันทึกสำเร็จ
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('บันทึกข้อมูลกล้องสำเร็จ!')),
+        );
+        
+        // หยุดการ Stream และกลับไปหน้าหลัก
+        setState(() => _isStreaming = false);
+        Navigator.pop(context); 
+      } else {
+        throw Exception(result['message'] ?? 'เกิดข้อผิดพลาดในการบันทึก');
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('ไม่สามารถบันทึกได้: $e')),
+      );
+    }
+  }
+
   @override
   void dispose() {
     _isStreaming = false; // หยุด Loop เมื่อปิดหน้าจอ
@@ -154,7 +197,7 @@ class _AddCameraScreenState extends State<AddCameraScreen> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       _buildActionButton("บันทึก", Colors.green, Icons.check, () {
-                         // TODO: เรียกฟังก์ชัน save
+                        _saveCamera(); // TODO: เรียกฟังก์ชัน save
                       }),
                       SizedBox(width: 20),
                       _buildActionButton("ยกเลิก", Colors.red[800]!, Icons.close, () {
