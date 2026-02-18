@@ -1,0 +1,65 @@
+1.สร้างสภาพแวดล้อมจำลอง (Virtual Environment): เพื่อไม่ให้ Library ตีกับโปรเจกต์อื่น
+    python -m venv venv
+2.เปิดใช้งาน venv:
+    .\venv\Scripts\activate
+3.ติดตั้ง Library ทั้งหมดตามรายการ:
+    pip install -r requirements.txt
+
+
+
+==========================================================
+   คู่มือการรันระบบ PARKING AI (FLUTTER + FASTAPI + DOCKER)
+==========================================================
+
+ขั้นตอนที่ 1: เตรียมฐานข้อมูลด้วย Docker
+--------------------------------------
+1. เปิดโปรแกรม Docker Desktop และรอให้เครื่องหมายมุมซ้ายล่างเป็นสีเขียว
+2. เปิด Terminal (CMD หรือ PowerShell) แล้วใช้คำสั่งสร้าง Database:
+   
+   docker run --name parking-db -e POSTGRES_PASSWORD=1234 -e POSTGRES_DB=parking_db -p 5432:5432 -d postgres
+
+3. ตรวจสอบว่า Container รันอยู่โดยพิมพ์: docker ps
+
+ขั้นตอนที่ 2: เตรียม Backend (Python FastAPI)
+--------------------------------------
+1. เข้าไปที่โฟลเดอร์ backend:
+   cd backend
+2. สร้างสภาพแวดล้อมจำลอง (เลือกตามระบบปฏิบัติการ):
+   (Windows) -> python -m venv venv
+   (Mac/Linux) -> python3 -m venv venv
+3. เปิดใช้งาน venv:
+   (Windows) -> venv\Scripts\activate
+   (Mac/Linux) -> source venv/bin/activate
+4. ติดตั้ง Library ทั้งหมด:
+   pip install -r requirements.txt
+5. ตรวจสอบไฟล์ database.py ว่า DB_CONFIG ตรงกับที่ตั้งใน Docker:
+   - password: "1234"
+   - database: "parking_db"
+6. รันเซิร์ฟเวอร์:
+   python main.py
+
+ขั้นตอนที่ 3: เตรียม Frontend (Flutter Web)
+--------------------------------------
+1. เปิด Terminal ใหม่แล้วเข้าไปที่โฟลเดอร์โครงการ Flutter:
+   cd parking_web
+2. ติดตั้ง Dependencies:
+   flutter pub get
+3. รันโปรแกรมผ่าน Chrome:
+   flutter run -d chrome
+
+ขั้นตอนที่ 4: ลำดับการใช้งานในหน้าเว็บ
+--------------------------------------
+1. เมื่อหน้าเว็บเปิดขึ้นมา (หน้าแรกคือรายการกล้องซึ่งจะยังว่างอยู่)
+2. กดปุ่ม (+) มุมขวาล่างเพื่อไปหน้า "เพิ่มกล้อง"
+3. กรอกข้อมูลกล้อง Tapo:
+   - ชื่อจุดจอด: (เช่น ทางเข้า 1)
+   - IP Address: (ไอพีล่าสุดที่เช็กได้จากแอป Tapo)
+   - Username: (ชื่อบัญชีในหน้า Camera Account)
+   - Password: (รหัสผ่านในหน้า Camera Account)
+4. กดบันทึก ระบบจะเด้งกลับมาหน้ารายชื่อกล้อง
+5. คลิกที่ชื่อกล้องเพื่อดูภาพสด (Live View)
+
+==========================================================
+หมายเหตุ: หากภาพไม่ขึ้น ให้ตรวจสอบว่า Python Terminal มี Error 
+401 หรือไม่ (ถ้ามี 401 แปลว่ารหัสผ่านกล้องผิด)
+==========================================================
