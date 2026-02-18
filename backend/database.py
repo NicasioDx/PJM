@@ -6,7 +6,7 @@ DB_CONFIG = {
     "host": "localhost",
     "database": "parking_db", # ชื่อ Database ที่คุณสร้างใน pgAdmin
     "user": "postgres",       # ปกติคือ postgres
-    "password": "your_password", # รหัสผ่านที่คุณตั้งตอนลง PostgreSQL
+    "password": "1234", # รหัสผ่านที่คุณตั้งตอนลง PostgreSQL
     "port": "5432"
 }
 

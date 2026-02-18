@@ -1,0 +1,78 @@
+# Flutter / Dart
+.dart_tool/
+.packages
+.flutter-plugins
+.flutter-plugins-dependencies
+.flutter-plugins-dependencies
+pubspec.lock
+build/
+/.idea/
+.vscode/
+.pub/
+/.gradle/
+/.package
+
+# Generated plugin registrant
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/Flutter/ephemeral/
+android/.gradle/
+android/app/build/
+**/build/
+
+# Xcode
+*.xcworkspace
+*.xcuserdata
+*.xcuserstate
+DerivedData/
+Pods/
+Podfile.lock
+ios/Runner/GeneratedPluginRegistrant.*
+
+# Android Studio/IntelliJ
+*.iml
+.idea/
+
+# Windows/macOS
+.DS_Store
+Thumbs.db
+
+# Environment / secrets
+.env
+.env.*
+local.properties
+
+# Python backend
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+env/
+venv/
+.venv/
+pip-selfcheck.json
+.pytest_cache/
+coverage/
+
+# Model files / weights (YOLO)
+*.pt
+*.pth
+*.onnx
+
+# Node
+node_modules/
+
+# Logs
+*.log
+
+# Misc
+coverage/
+*.lock
+*.log
+
+# Flutter build outputs in other platforms
+/.dart_tool/
+/.flutter-plugins
+/.flutter-plugins-dependencies
+/.idea/
+/.metadata

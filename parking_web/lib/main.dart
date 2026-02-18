@@ -18,7 +18,7 @@ class ParkingAIApp extends StatelessWidget {
       // ตั้งค่าหน้าแรกเป็นหน้า "รายชื่อกล้อง" (ถ้าไม่มีข้อมูลค่อยกดเพิ่ม)
       initialRoute: '/list', 
       routes: {
-        '/add': (context) => const AddCameraScreen(),
+        '/add': (context) => AddCameraScreen(),
         '/list': (context) => const CameraListScreen(),
       },
       // หน้า LiveView เราจะใช้ Navigator.push แบบส่งค่าแทน
