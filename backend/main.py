@@ -347,14 +347,65 @@ async def global_exception_handler(request: Request, exc: Exception):
         },
     )
 
+from fastapi.responses import JSONResponse
+
+# --- Health & Debug Routes ---
+@app.get("/ping")
+async def ping():
+    """ทดสอบว่า backend + ngrok ตอบได้ปกติ"""
+    return JSONResponse(
+        {"status": "ok", "time": time.time()},
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
+        },
+    )
+
+
+@app.options("/get_cameras")
+async def get_cameras_options():
+    """CORS preflight"""
+    print("📋 OPTIONS /get_cameras preflight")
+    return JSONResponse(
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type,Authorization,Origin",
+            "Access-Control-Max-Age": "3600",
+        },
+    )
+
+
 @app.get("/get_cameras")
 async def get_cameras():
+    """ดึงรายการกล้องทั้งหมด"""
     print("➡️ /get_cameras called")
-    start = time.time()
-    cameras = get_all_cameras()
-    elapsed = time.time() - start
-    print(f"⬅️ /get_cameras returned {len(cameras)} cameras in {elapsed:.3f}s")
-    return cameras
+    request_time = time.time()
+    try:
+        cameras = get_all_cameras()
+        elapsed = time.time() - request_time
+        print(f"✅ /get_cameras returned {len(cameras)} cameras in {elapsed:.3f}s")
+        return JSONResponse(
+            cameras,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+            },
+        )
+    except Exception as e:
+        elapsed = time.time() - request_time
+        print(f"❌ /get_cameras error after {elapsed:.3f}s: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            {"error": str(e), "type": type(e).__name__},
+            status_code=500,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+            },
+        )
 
 @app.post("/get_frame")
 async def get_frame(data: CameraRequest):
