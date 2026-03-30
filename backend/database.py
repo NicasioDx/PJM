@@ -1,5 +1,6 @@
 import hashlib
 import psycopg2
+from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
 import os
 from urllib.parse import urlparse
@@ -27,14 +28,44 @@ else:
         "port": 5432
     }
 
+DB_POOL = None
+
+def init_db_pool():
+    global DB_POOL
+    if DB_POOL is None:
+        try:
+            DB_POOL = pool.SimpleConnectionPool(
+                1,
+                10,
+                connect_timeout=5,
+                **DB_CONFIG,
+            )
+            print("✅ Database pool initialized")
+        except Exception as e:
+            print(f"❌ Error creating connection pool: {e}")
+            DB_POOL = None
+    return DB_POOL
+
+
 def get_connection():
-    """สร้างการเชื่อมต่อกับ PostgreSQL"""
+    """ดึง connection จาก pool"""
+    db_pool = init_db_pool()
+    if not db_pool:
+        return None
     try:
-        conn = psycopg2.connect(**DB_CONFIG)
+        conn = db_pool.getconn()
         return conn
     except Exception as e:
-        print(f"❌ Error connecting to database: {e}")
+        print(f"❌ Error getting connection from pool: {e}")
         return None
+
+
+def release_connection(conn):
+    if conn and DB_POOL:
+        try:
+            DB_POOL.putconn(conn)
+        except Exception as e:
+            print(f"❌ Error releasing connection to pool: {e}")
 
 
 def hash_password(password: str) -> str:
@@ -78,28 +109,42 @@ def init_db():
 def add_camera_to_db(name, ip, user, pw):
     conn = get_connection()
     if conn:
-        cur = conn.cursor()
-        cur.execute(
-            "INSERT INTO cameras (camera_name, ip_address, username, password) VALUES (%s, %s, %s, %s)",
-            (name, ip, user, pw)
-        )
-        conn.commit()
-        cur.close()
-        conn.close()
-        return True
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                "INSERT INTO cameras (camera_name, ip_address, username, password) VALUES (%s, %s, %s, %s)",
+                (name, ip, user, pw)
+            )
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"Error adding camera: {e}")
+            if conn:
+                conn.rollback()
+            return False
+        finally:
+            if cur:
+                cur.close()
+            release_connection(conn)
     return False
 
 
 def get_all_cameras():
     conn = get_connection()
     if conn:
-        # ใช้ RealDictCursor เพื่อให้ผลลัพธ์ออกมาเป็น Dictionary (คล้าย JSON)
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT * FROM cameras ORDER BY created_at DESC")
-        rows = cur.fetchall()
-        cur.close()
-        conn.close()
-        return rows
+        try:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("SELECT * FROM cameras ORDER BY created_at DESC")
+            rows = cur.fetchall()
+            # แปลงเป็น list of dicts เพื่อให้ JSON serializable
+            return [dict(row) for row in rows]
+        except Exception as e:
+            print(f"Error fetching cameras: {e}")
+            return []
+        finally:
+            if cur:
+                cur.close()
+            release_connection(conn)
     return []
 
 
@@ -115,17 +160,21 @@ def create_user(username: str, password: str) -> bool:
             (username, password_hash),
         )
         conn.commit()
-        cur.close()
-        conn.close()
         return True
     except psycopg2.IntegrityError:
-        conn.rollback()
-        cur.close()
-        conn.close()
+        if conn:
+            conn.rollback()
         return False
     except Exception as e:
         print(f"Error creating user: {e}")
-        conn.rollback()
+        if conn:
+            conn.rollback()
+        return False
+    finally:
+        if cur:
+            cur.close()
+        release_connection(conn)
+
         cur.close()
         conn.close()
         return False
@@ -139,11 +188,14 @@ def authenticate_user(username: str, password: str) -> bool:
         cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("SELECT password_hash FROM users WHERE username=%s", (username,))
         user = cur.fetchone()
-        cur.close()
-        conn.close()
         if not user:
             return False
         return user['password_hash'] == hash_password(password)
     except Exception as e:
         print(f"Error authenticating user: {e}")
         return False
+    finally:
+        if cur:
+            cur.close()
+        release_connection(conn)
+

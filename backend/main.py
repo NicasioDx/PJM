@@ -12,8 +12,9 @@ import asyncio
 from contextlib import asynccontextmanager
 
 torch.load = functools.partial(torch.load, weights_only=False)
-from fastapi import FastAPI, HTTPException, WebSocket
+from fastapi import FastAPI, HTTPException, WebSocket, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import uvicorn
 from ultralytics import YOLO 
@@ -59,11 +60,18 @@ app = FastAPI(lifespan=lifespan)
 # ปลดล็อก CORS เพื่อให้ Flutter Web เข้าถึงได้
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,  # 🔥 เปลี่ยนตรงนี้
+    allow_origins=[
+        "https://revocable-ventrally-sergio.ngrok-free.dev",
+        "https://terraqueous-plantar-phebe.ngrok-free.dev",
+        "http://localhost:3000",
+        "http://localhost:8080",
+        "http://localhost:8000",
+    ],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 # --- Models ---
 class CameraRegister(BaseModel):
@@ -326,9 +334,27 @@ async def add_camera(data: CameraRegister):
         return {"status": "success", "message": "Camera added"}
     raise HTTPException(status_code=500, detail="Failed to add camera")
 
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    print(f"❌ Global error: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal Server Error", "error": str(exc)},
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+        },
+    )
+
 @app.get("/get_cameras")
 async def get_cameras():
-    return get_all_cameras()
+    print("➡️ /get_cameras called")
+    start = time.time()
+    cameras = get_all_cameras()
+    elapsed = time.time() - start
+    print(f"⬅️ /get_cameras returned {len(cameras)} cameras in {elapsed:.3f}s")
+    return cameras
 
 @app.post("/get_frame")
 async def get_frame(data: CameraRequest):
