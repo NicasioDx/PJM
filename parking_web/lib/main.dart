@@ -20,7 +20,7 @@ class ParkingAIApp extends StatelessWidget {
         return MaterialPageRoute(builder: (_) => const RegisterScreen(), settings: settings);
       case '/add':
         return MaterialPageRoute(
-          builder: (_) => const RequireAuth(child: AddCameraScreen()),
+          builder: (_) => RequireAuth(child: AddCameraScreen()),
           settings: settings,
         );
       case '/list':
