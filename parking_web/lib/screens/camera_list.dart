@@ -14,6 +14,11 @@ class _CameraListScreenState extends State<CameraListScreen> {
   Future<List> _fetchCameras() async {
     final response = await http.get(
       Uri.parse('$BASE_URL/get_cameras'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'ngrok-skip-browser-warning': 'true',
+      },
     );
     if (response.statusCode == 200) return jsonDecode(response.body);
     return [];

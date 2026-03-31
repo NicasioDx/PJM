@@ -57,17 +57,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-# ปลดล็อก CORS เพื่อให้ Flutter Web เข้าถึงได้
+# ปลดล็อก CORS - ยอมรับทุก origin
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://revocable-ventrally-sergio.ngrok-free.dev",
-        "https://terraqueous-plantar-phebe.ngrok-free.dev",
-        "http://localhost:3000",
-        "http://localhost:8080",
-        "http://localhost:8000",
-    ],
-    allow_credentials=True,
+    allow_origins=["*"],  # ยอมรับทุก domain/origin
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -353,59 +347,33 @@ from fastapi.responses import JSONResponse
 @app.get("/ping")
 async def ping():
     """ทดสอบว่า backend + ngrok ตอบได้ปกติ"""
-    return JSONResponse(
-        {"status": "ok", "time": time.time()},
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, OPTIONS",
-        },
-    )
+    return {"status": "ok", "time": time.time()}
 
 
 @app.options("/get_cameras")
 async def get_cameras_options():
-    """CORS preflight"""
+    """CORS preflight - ให้ CORSMiddleware จัดการ"""
     print("📋 OPTIONS /get_cameras preflight")
-    return JSONResponse(
-        status_code=200,
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type,Authorization,Origin",
-            "Access-Control-Max-Age": "3600",
-        },
-    )
+    return {}
 
 
 @app.get("/get_cameras")
 async def get_cameras():
-    """ดึงรายการกล้องทั้งหมด"""
+    """ดึงรายการกล้องทั้งหมด - ให้ CORSMiddleware จัดการ header"""
     print("➡️ /get_cameras called")
     request_time = time.time()
     try:
         cameras = get_all_cameras()
         elapsed = time.time() - request_time
         print(f"✅ /get_cameras returned {len(cameras)} cameras in {elapsed:.3f}s")
-        return JSONResponse(
-            cameras,
-            headers={
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "GET, OPTIONS",
-            },
-        )
+        # ส่ง data กลับอย่างเรียบร้อย ไม่ต้อง custom headers
+        return cameras
     except Exception as e:
         elapsed = time.time() - request_time
         print(f"❌ /get_cameras error after {elapsed:.3f}s: {type(e).__name__}: {e}")
         import traceback
         traceback.print_exc()
-        return JSONResponse(
-            {"error": str(e), "type": type(e).__name__},
-            status_code=500,
-            headers={
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "GET, OPTIONS",
-            },
-        )
+        return {"error": str(e), "type": type(e).__name__}
 
 @app.post("/get_frame")
 async def get_frame(data: CameraRequest):
