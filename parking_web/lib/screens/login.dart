@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../config/api.dart';
+import '../config/session.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -36,6 +37,8 @@ class _LoginScreenState extends State<LoginScreen> {
     );
 
     if (response.statusCode == 200) {
+      await SessionStore.setLoggedIn(true);
+      if (!mounted) return;
       Navigator.pushReplacementNamed(context, '/list');
     } else {
       final body = jsonDecode(response.body);

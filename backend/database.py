@@ -1,10 +1,12 @@
 import hashlib
+import base64
 import psycopg2
 from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
 import os
 from typing import TypedDict, Literal
 from urllib.parse import urlparse
+from cryptography.fernet import Fernet, InvalidToken
 
 # 1. ตั้งค่าการเชื่อมต่อ
 DATABASE_URL = os.getenv('DATABASE_URL')
@@ -30,11 +32,38 @@ else:
     }
 
 DB_POOL = None
+_CAMERA_CIPHER = None
 
 
 class UserActionResult(TypedDict):
     status: Literal["created", "duplicate", "authenticated", "invalid_credentials", "db_unavailable", "db_error"]
     message: str
+
+
+def _get_camera_cipher() -> Fernet:
+    global _CAMERA_CIPHER
+    if _CAMERA_CIPHER is None:
+        key_from_env = os.getenv("CAMERA_CREDENTIAL_KEY")
+        if key_from_env:
+            key = key_from_env.encode("utf-8")
+        else:
+            # Deterministic local fallback key for development when env var is absent.
+            raw = hashlib.sha256((DATABASE_URL or "local-camera-key").encode("utf-8")).digest()
+            key = base64.urlsafe_b64encode(raw)
+        _CAMERA_CIPHER = Fernet(key)
+    return _CAMERA_CIPHER
+
+
+def encrypt_camera_password(password: str) -> str:
+    return _get_camera_cipher().encrypt(password.encode("utf-8")).decode("utf-8")
+
+
+def decrypt_camera_password(token: str) -> str:
+    try:
+        return _get_camera_cipher().decrypt(token.encode("utf-8")).decode("utf-8")
+    except InvalidToken:
+        # Backward compatibility for existing plaintext rows.
+        return token
 
 def init_db_pool():
     global DB_POOL
@@ -102,24 +131,32 @@ def init_db():
 
     conn = get_connection()
     if conn:
-        cur = conn.cursor()
-        cur.execute(camera_query)
-        cur.execute(user_query)
-        conn.commit()
-        cur.close()
-        conn.close()
-        print("✅ Database initialized successfully")
+        cur = None
+        try:
+            cur = conn.cursor()
+            cur.execute(camera_query)
+            cur.execute(user_query)
+            # Ensure encrypted camera password tokens can be stored.
+            cur.execute("ALTER TABLE cameras ALTER COLUMN password TYPE TEXT")
+            conn.commit()
+            print("✅ Database initialized successfully")
+        finally:
+            if cur:
+                cur.close()
+            release_connection(conn)
 
 
 # ฟังก์ชันช่วยเหลือสำหรับ API
 def add_camera_to_db(name, ip, user, pw):
     conn = get_connection()
     if conn:
+        cur = None
         try:
+            encrypted_pw = encrypt_camera_password(pw)
             cur = conn.cursor()
             cur.execute(
                 "INSERT INTO cameras (camera_name, ip_address, username, password) VALUES (%s, %s, %s, %s)",
-                (name, ip, user, pw)
+                (name, ip, user, encrypted_pw)
             )
             conn.commit()
             return True
@@ -138,12 +175,16 @@ def add_camera_to_db(name, ip, user, pw):
 def get_all_cameras():
     conn = get_connection()
     if conn:
+        cur = None
         try:
             cur = conn.cursor(cursor_factory=RealDictCursor)
             cur.execute("SELECT * FROM cameras ORDER BY created_at DESC")
             rows = cur.fetchall()
             # แปลงเป็น list of dicts เพื่อให้ JSON serializable
-            return [dict(row) for row in rows]
+            cameras = [dict(row) for row in rows]
+            for cam in cameras:
+                cam["password"] = decrypt_camera_password(cam["password"])
+            return cameras
         except Exception as e:
             print(f"Error fetching cameras: {e}")
             return []

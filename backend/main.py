@@ -23,7 +23,7 @@ from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.media import MediaPlayer
 
 # นำเข้าฟังก์ชันจาก database.py
-from database import init_db, add_camera_to_db, get_all_cameras, create_user, authenticate_user, get_connection
+from database import init_db, add_camera_to_db, get_all_cameras, create_user, authenticate_user, get_connection, release_connection
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
 logger = logging.getLogger("parking_backend")
@@ -44,7 +44,7 @@ async def lifespan(app: FastAPI):
         try:
             conn = get_connection()
             if conn:
-                conn.close()
+                release_connection(conn)
                 print("✅ Database connected successfully")
                 break
         except Exception as e:
@@ -185,6 +185,10 @@ async def webrtc_offer(data: WebRTCOffer):
 async def websocket_live(websocket: WebSocket):
     await websocket.accept()
     print("🔗 WebSocket connected for live stream")
+
+    def _is_disconnect_exception(exc: Exception) -> bool:
+        name = type(exc).__name__
+        return name in {"WebSocketDisconnect", "ClientDisconnected"}
     
     # รับ camera data จาก client
     try:
@@ -261,7 +265,22 @@ async def websocket_live(websocket: WebSocket):
                 print("⚠️ JPEG encoding failed")
                 continue
 
-            await websocket.send_bytes(buffer.tobytes())
+            try:
+                await websocket.send_bytes(buffer.tobytes())
+            except WebSocketDisconnect:
+                stop_event.set()
+                return
+            except Exception as e:
+                if _is_disconnect_exception(e):
+                    stop_event.set()
+                    return
+                raise
+            except RuntimeError as e:
+                # Raised when client disconnects and websocket is already closed.
+                print(f"ℹ️ WebSocket send stopped: {e}")
+                stop_event.set()
+                return
+
             frame_count += 1
 
             proc_time = time.time() - t0
@@ -279,18 +298,40 @@ async def websocket_live(websocket: WebSocket):
 
     try:
         done, pending = await asyncio.wait({capture_task, process_task}, return_when=asyncio.FIRST_EXCEPTION)
+
+        for t in pending:
+            t.cancel()
+
         for t in done:
-            if t.exception():
-                raise t.exception()
+            if t.cancelled():
+                continue
+            exc = t.exception()
+            if exc is None:
+                continue
+            if _is_disconnect_exception(exc):
+                print("ℹ️ WebSocket client disconnected")
+                continue
+            print(f"❌ Error in streaming pipeline: {type(exc).__name__}: {exc}")
+    except WebSocketDisconnect:
+        print("ℹ️ WebSocket client disconnected")
     except Exception as e:
-        print(f"❌ Error in streaming pipeline: {e}")
+        print(f"❌ Error in streaming pipeline: {type(e).__name__}: {e}")
     finally:
         stop_event.set()
-        capture_task.cancel()
-        process_task.cancel()
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(capture_task, process_task, return_exceptions=True),
+                timeout=1.5,
+            )
+        except asyncio.TimeoutError:
+            capture_task.cancel()
+            process_task.cancel()
         cap.release()
         print("🔚 Camera released, WebSocket closing")
-        await websocket.close()
+        try:
+            await websocket.close()
+        except Exception:
+            pass
 
 
 @app.websocket("/ws/preview_camera")
@@ -348,15 +389,18 @@ async def health():
     conn = get_connection()
     if conn is None:
         raise HTTPException(status_code=503, detail="Cannot connect to database")
+    cur = None
     try:
         cur = conn.cursor()
         cur.execute("SELECT 1")
         cur.fetchone()
-        cur.close()
-        conn.close()
         return {"status": "ok", "database": "connected"}
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Database health check failed: {e}")
+    finally:
+        if cur:
+            cur.close()
+        release_connection(conn)
 
 
 # --- Camera Manager ---

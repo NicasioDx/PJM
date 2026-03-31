@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'live_view.dart';
 import '../config/api.dart';
+import '../config/session.dart';
 
 class CameraListScreen extends StatefulWidget {
   const CameraListScreen({super.key});
@@ -24,7 +25,9 @@ class _CameraListScreenState extends State<CameraListScreen> {
     return [];
   }
 
-  void _logout() {
+  Future<void> _logout() async {
+    await SessionStore.clear();
+    if (!mounted) return;
     Navigator.pushReplacementNamed(context, '/login');
   }
 

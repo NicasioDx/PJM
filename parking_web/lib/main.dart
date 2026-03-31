@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'screens/add_camera.dart';
 import 'screens/camera_list.dart';
-import 'screens/live_view.dart';
 import 'screens/login.dart';
 import 'screens/register.dart';
+import 'config/session.dart';
 
 void main() {
   runApp(const ParkingAIApp());
@@ -11,6 +11,27 @@ void main() {
 
 class ParkingAIApp extends StatelessWidget {
   const ParkingAIApp({super.key});
+
+  Route<dynamic> _buildRoute(RouteSettings settings) {
+    switch (settings.name) {
+      case '/login':
+        return MaterialPageRoute(builder: (_) => const LoginScreen(), settings: settings);
+      case '/register':
+        return MaterialPageRoute(builder: (_) => const RegisterScreen(), settings: settings);
+      case '/add':
+        return MaterialPageRoute(
+          builder: (_) => const RequireAuth(child: AddCameraScreen()),
+          settings: settings,
+        );
+      case '/list':
+        return MaterialPageRoute(
+          builder: (_) => const RequireAuth(child: CameraListScreen()),
+          settings: settings,
+        );
+      default:
+        return MaterialPageRoute(builder: (_) => const LoginScreen(), settings: settings);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -46,13 +67,33 @@ class ParkingAIApp extends StatelessWidget {
         ),
       ),
       initialRoute: '/login',
-      routes: {
-        '/login': (context) => const LoginScreen(),
-        '/register': (context) => const RegisterScreen(),
-        '/add': (context) => AddCameraScreen(),
-        '/list': (context) => const CameraListScreen(),
-      },
+      onGenerateRoute: _buildRoute,
       // หน้า LiveView เราจะใช้ Navigator.push แบบส่งค่าแทน
+    );
+  }
+}
+
+class RequireAuth extends StatelessWidget {
+  final Widget child;
+  const RequireAuth({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<bool>(
+      future: SessionStore.isLoggedIn(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        final isLoggedIn = snapshot.data ?? false;
+        if (!isLoggedIn) {
+          return const LoginScreen();
+        }
+        return child;
+      },
     );
   }
 }
