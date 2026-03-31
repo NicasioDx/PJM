@@ -90,7 +90,13 @@ class RequireAuth extends StatelessWidget {
 
         final isLoggedIn = snapshot.data ?? false;
         if (!isLoggedIn) {
-          return const LoginScreen();
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!context.mounted) return;
+            Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+          });
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
         }
         return child;
       },
