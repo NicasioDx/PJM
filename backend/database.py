@@ -3,6 +3,7 @@ import psycopg2
 from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
 import os
+from typing import TypedDict, Literal
 from urllib.parse import urlparse
 
 # 1. ตั้งค่าการเชื่อมต่อ
@@ -29,6 +30,11 @@ else:
     }
 
 DB_POOL = None
+
+
+class UserActionResult(TypedDict):
+    status: Literal["created", "duplicate", "authenticated", "invalid_credentials", "db_unavailable", "db_error"]
+    message: str
 
 def init_db_pool():
     global DB_POOL
@@ -148,10 +154,11 @@ def get_all_cameras():
     return []
 
 
-def create_user(username: str, password: str) -> bool:
+def create_user(username: str, password: str) -> UserActionResult:
     conn = get_connection()
     if not conn:
-        return False
+        return {"status": "db_unavailable", "message": "Database connection is not available"}
+    cur = None
     try:
         password_hash = hash_password(password)
         cur = conn.cursor()
@@ -160,40 +167,41 @@ def create_user(username: str, password: str) -> bool:
             (username, password_hash),
         )
         conn.commit()
-        return True
+        return {"status": "created", "message": "User registered"}
     except psycopg2.IntegrityError:
         if conn:
             conn.rollback()
-        return False
+        return {"status": "duplicate", "message": "Username already exists"}
     except Exception as e:
         print(f"Error creating user: {e}")
         if conn:
             conn.rollback()
-        return False
+        return {"status": "db_error", "message": "Unexpected database error while creating user"}
     finally:
         if cur:
             cur.close()
         release_connection(conn)
 
-        cur.close()
-        conn.close()
-        return False
 
-
-def authenticate_user(username: str, password: str) -> bool:
+def authenticate_user(username: str, password: str) -> UserActionResult:
     conn = get_connection()
     if not conn:
-        return False
+        return {"status": "db_unavailable", "message": "Database connection is not available"}
+    cur = None
     try:
         cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("SELECT password_hash FROM users WHERE username=%s", (username,))
         user = cur.fetchone()
         if not user:
-            return False
-        return user['password_hash'] == hash_password(password)
+            return {"status": "invalid_credentials", "message": "Invalid username or password"}
+
+        if user['password_hash'] == hash_password(password):
+            return {"status": "authenticated", "message": "Login successful"}
+
+        return {"status": "invalid_credentials", "message": "Invalid username or password"}
     except Exception as e:
         print(f"Error authenticating user: {e}")
-        return False
+        return {"status": "db_error", "message": "Unexpected database error while authenticating user"}
     finally:
         if cur:
             cur.close()

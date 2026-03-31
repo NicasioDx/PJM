@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:async';
 import 'dart:typed_data';
 import 'package:web_socket_channel/web_socket_channel.dart';
-import 'dart:io';
+import '../config/api.dart';
 
 class LiveViewScreen extends StatefulWidget {
   final String ip, user, pass, name;
@@ -20,35 +19,22 @@ class _LiveViewScreenState extends State<LiveViewScreen> {
   bool _isConnected = false;
   int _retryCount = 0;
   static const int _maxRetries = 5;
-  String _serverUrl = 'ws://localhost:8000/ws/live';
+  late final String _serverUrl;
 
   @override
   void initState() {
     super.initState();
-    _initServerUrl();
+    _serverUrl = _buildWebSocketUrl();
     _connectWebSocket();
   }
 
-  void _initServerUrl() async {
-    if (Platform.isAndroid || Platform.isIOS) {
-      // For mobile, try to find the server IP
-      try {
-        var interfaces = await NetworkInterface.list();
-        for (var interface in interfaces) {
-          for (var addr in interface.addresses) {
-            if (addr.type == InternetAddressType.IPv4 && !addr.address.startsWith('127.')) {
-              // Assume the first non-loopback IPv4 is the server IP
-              _serverUrl = 'ws://${addr.address}:8000/ws/live';
-              break;
-            }
-          }
-          if (!_serverUrl.contains('localhost')) break;
-        }
-      } catch (e) {
-        print('Failed to get network interfaces: $e');
-      }
-    }
-    print('Using server URL: $_serverUrl');
+  String _buildWebSocketUrl() {
+    final baseUri = Uri.parse(BASE_URL);
+    final wsScheme = baseUri.scheme == 'https' ? 'wss' : 'ws';
+    final wsUri = baseUri.replace(scheme: wsScheme, path: '/ws/live');
+    final serverUrl = wsUri.toString();
+    print('Using server URL: $serverUrl');
+    return serverUrl;
   }
 
   void _connectWebSocket() {

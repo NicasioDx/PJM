@@ -39,7 +39,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('สมัครสมาชิกเรียบร้อย')));
-      Navigator.pop(context);
+
+      if (!mounted) return;
+      if (Navigator.canPop(context)) {
+        Navigator.pop(context);
+      } else {
+        Navigator.pushReplacementNamed(context, '/login');
+      }
     } else {
       final body = jsonDecode(response.body);
       final message = body['detail'] ?? 'Register failed';

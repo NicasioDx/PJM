@@ -6,6 +6,7 @@ import cv2
 import base64
 import threading
 import time
+import logging
 import torch
 import functools
 import asyncio
@@ -23,6 +24,9 @@ from aiortc.contrib.media import MediaPlayer
 
 # นำเข้าฟังก์ชันจาก database.py
 from database import init_db, add_camera_to_db, get_all_cameras, create_user, authenticate_user, get_connection
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
+logger = logging.getLogger("parking_backend")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -96,17 +100,42 @@ class UserLogin(BaseModel):
 
 @app.post("/register")
 async def register(data: UserRegister):
-    created = create_user(data.username, data.password)
-    if not created:
-        raise HTTPException(status_code=400, detail="Username already exists or registration failed")
-    return {"status": "success", "message": "User registered"}
+    result = create_user(data.username, data.password)
+
+    if result["status"] == "created":
+        logger.info("REGISTER_SUCCESS username=%s", data.username)
+        return {"status": "success", "message": result["message"]}
+
+    if result["status"] == "duplicate":
+        logger.warning("REGISTER_DUPLICATE username=%s", data.username)
+        raise HTTPException(status_code=409, detail=result["message"])
+
+    if result["status"] == "db_unavailable":
+        logger.error("REGISTER_DB_UNAVAILABLE username=%s", data.username)
+        raise HTTPException(status_code=503, detail=result["message"])
+
+    logger.error("REGISTER_DB_ERROR username=%s", data.username)
+    raise HTTPException(status_code=500, detail=result["message"])
 
 
 @app.post("/login")
 async def login(data: UserLogin):
-    if authenticate_user(data.username, data.password):
-        return {"status": "success", "message": "Login successful"}
-    raise HTTPException(status_code=401, detail="Invalid username or password")
+    result = authenticate_user(data.username, data.password)
+
+    if result["status"] == "authenticated":
+        logger.info("LOGIN_SUCCESS username=%s", data.username)
+        return {"status": "success", "message": result["message"]}
+
+    if result["status"] == "invalid_credentials":
+        logger.warning("LOGIN_INVALID_CREDENTIALS username=%s", data.username)
+        raise HTTPException(status_code=401, detail=result["message"])
+
+    if result["status"] == "db_unavailable":
+        logger.error("LOGIN_DB_UNAVAILABLE username=%s", data.username)
+        raise HTTPException(status_code=503, detail=result["message"])
+
+    logger.error("LOGIN_DB_ERROR username=%s", data.username)
+    raise HTTPException(status_code=500, detail=result["message"])
 
 
 # WebRTC connections
