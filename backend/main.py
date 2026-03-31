@@ -13,7 +13,7 @@ import asyncio
 from contextlib import asynccontextmanager
 
 torch.load = functools.partial(torch.load, weights_only=False)
-from fastapi import FastAPI, HTTPException, WebSocket, Request
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -291,6 +291,56 @@ async def websocket_live(websocket: WebSocket):
         cap.release()
         print("🔚 Camera released, WebSocket closing")
         await websocket.close()
+
+
+@app.websocket("/ws/preview_camera")
+async def websocket_preview_camera(websocket: WebSocket):
+    """Low-latency preview stream for add-camera page (no AI inference)."""
+    await websocket.accept()
+    cap = None
+
+    try:
+        data = await websocket.receive_json()
+        ip = data['ip']
+        username = data['username']
+        password = data['password']
+
+        url = f"rtsp://{username}:{password}@{ip}:554/stream2"
+        print(f"🔎 Preview stream open: {url}")
+
+        cap = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        cap.set(cv2.CAP_PROP_FPS, 60)
+
+        if not cap.isOpened():
+            await websocket.send_text("error: cannot open camera stream")
+            return
+
+        while True:
+            success, frame = await asyncio.get_running_loop().run_in_executor(None, cap.read)
+            if not success or frame is None:
+                await asyncio.sleep(0.01)
+                continue
+
+            preview = cv2.resize(frame, (640, 360))
+            ok, buffer = cv2.imencode('.jpg', preview, [cv2.IMWRITE_JPEG_QUALITY, 55])
+            if not ok:
+                continue
+
+            await websocket.send_bytes(buffer.tobytes())
+            await asyncio.sleep(0)
+
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        print(f"❌ Preview WebSocket error: {e}")
+    finally:
+        if cap:
+            cap.release()
+        try:
+            await websocket.close()
+        except Exception:
+            pass
 
 
 @app.get("/health")

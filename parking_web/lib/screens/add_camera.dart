@@ -1,7 +1,8 @@
 import 'dart:convert';
-import 'dart:async';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:web_socket_channel/web_socket_channel.dart';
 import '../config/api.dart';
 
 class AddCameraScreen extends StatefulWidget {
@@ -15,62 +16,119 @@ class _AddCameraScreenState extends State<AddCameraScreen> {
   final _userController = TextEditingController();
   final _passController = TextEditingController();
 
-  String? _previewImageBase64;
-  bool _isStreaming = false; 
-  bool _isRequesting = false; 
+  WebSocketChannel? _previewChannel;
+  Uint8List? _previewImageBytes;
+  bool _isStreaming = false;
+  String? _streamError;
 
-  // 1. ฟังก์ชันควบคุมการเปิด-ปิด Stream
   void _toggleStream() {
     if (_isStreaming) {
-      setState(() {
-        _isStreaming = false;
-        _previewImageBase64 = null;
-      });
+      _stopPreviewStream(clearImage: true);
     } else {
-      setState(() => _isStreaming = true);
-      _startStreamingLoop(); 
-    }
-  }
-
-  // 2. ฟังก์ชัน Loop: ดึงภาพเสร็จ 1 เฟรม แล้วค่อยรอจังหวะดึงเฟรมถัดไป
-  Future<void> _startStreamingLoop() async {
-    while (_isStreaming) {
-      if (!_isRequesting) {
-        await _getSingleFrame();
+      if (_ipController.text.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('กรุณากรอก IP Address ก่อนทดสอบ')),
+        );
+        return;
       }
-      // รอ 100ms เพื่อให้ UI ลื่นไหลและไม่กิน CPU
-      await Future.delayed(Duration(milliseconds: 100));
+      _startPreviewStream();
     }
   }
 
-  // 3. ฟังก์ชันดึงภาพทีละเฟรมจาก Backend (เหลือตัวเดียวที่ถูกต้อง)
-  Future<void> _getSingleFrame() async {
-    if (!mounted) return;
-    _isRequesting = true;
-    
+  String _buildPreviewWsUrl() {
+    final baseUri = Uri.parse(BASE_URL);
+    final wsScheme = baseUri.scheme == 'https' ? 'wss' : 'ws';
+    return baseUri.replace(scheme: wsScheme, path: '/ws/preview_camera').toString();
+  }
+
+  void _startPreviewStream() {
+    _stopPreviewStream(clearImage: false);
+
+    final wsUrl = _buildPreviewWsUrl();
+    final channel = WebSocketChannel.connect(Uri.parse(wsUrl));
+    _previewChannel = channel;
+
+    setState(() {
+      _isStreaming = true;
+      _streamError = null;
+    });
+
     try {
-      final response = await http.post(
-        Uri.parse('$BASE_URL/preview_camera'), 
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({
+      channel.sink.add(
+        jsonEncode({
           "ip": _ipController.text,
           "username": _userController.text,
           "password": _passController.text,
         }),
-      ).timeout(Duration(seconds: 4));
+      );
 
-      if (response.statusCode == 200) {
-        final result = jsonDecode(response.body);
-        if (result['status'] == 'success' && _isStreaming) {
-          setState(() {
-            _previewImageBase64 = result['image'];
-          });
-        }
+      channel.stream.listen(
+        (data) {
+          if (!mounted || !_isStreaming) return;
+
+          if (data is Uint8List) {
+            setState(() {
+              _previewImageBytes = data;
+              _streamError = null;
+            });
+            return;
+          }
+
+          if (data is List<int>) {
+            setState(() {
+              _previewImageBytes = Uint8List.fromList(data);
+              _streamError = null;
+            });
+            return;
+          }
+
+          if (data is String && data.startsWith('error:')) {
+            _handleStreamError(data.replaceFirst('error:', '').trim());
+          }
+        },
+        onError: (error) {
+          _handleStreamError('เชื่อมต่อ preview ไม่สำเร็จ');
+        },
+        onDone: () {
+          if (_isStreaming) {
+            _handleStreamError('การเชื่อมต่อ preview ถูกปิด');
+          }
+        },
+      );
+    } catch (_) {
+      _handleStreamError('เชื่อมต่อ preview ไม่สำเร็จ');
+    }
+  }
+
+  void _handleStreamError(String message) {
+    if (!mounted) return;
+
+    _previewChannel?.sink.close();
+    _previewChannel = null;
+
+    setState(() {
+      _isStreaming = false;
+      _streamError = message;
+    });
+  }
+
+  void _stopPreviewStream({required bool clearImage}) {
+    _previewChannel?.sink.close();
+    _previewChannel = null;
+
+    if (!mounted) return;
+    setState(() {
+      _isStreaming = false;
+      _streamError = null;
+      if (clearImage) {
+        _previewImageBytes = null;
       }
-    } catch (e) {
-      print("Stream Error: $e");
-    } finally {
-      _isRequesting = false;
+    });
+  }
+
+  void _onInputChanged(String _) {
+    if (_isStreaming) {
+      _startPreviewStream();
     }
   }
 
@@ -105,7 +163,7 @@ class _AddCameraScreenState extends State<AddCameraScreen> {
         );
         
         // หยุดการ Stream และกลับไปหน้าหลัก
-        setState(() => _isStreaming = false);
+        _stopPreviewStream(clearImage: true);
         Navigator.pop(context); 
       } else {
         throw Exception(result['message'] ?? 'เกิดข้อผิดพลาดในการบันทึก');
@@ -119,7 +177,7 @@ class _AddCameraScreenState extends State<AddCameraScreen> {
 
   @override
   void dispose() {
-    _isStreaming = false; // หยุด Loop เมื่อปิดหน้าจอ
+    _previewChannel?.sink.close();
     _nameController.dispose();
     _ipController.dispose();
     _userController.dispose();
@@ -200,11 +258,11 @@ class _AddCameraScreenState extends State<AddCameraScreen> {
                           color: Colors.black,
                           borderRadius: BorderRadius.circular(10),
                         ),
-                        child: _previewImageBase64 != null
+                        child: _previewImageBytes != null
                             ? ClipRRect(
                                 borderRadius: BorderRadius.circular(10),
                                 child: Image.memory(
-                                  base64Decode(_previewImageBase64!),
+                                  _previewImageBytes!,
                                   fit: BoxFit.cover,
                                   gaplessPlayback: true,
                                 ),
@@ -220,8 +278,9 @@ class _AddCameraScreenState extends State<AddCameraScreen> {
                                     ),
                                     SizedBox(height: 16),
                                     Text(
-                                      "ไม่มีสัญญาณภาพ",
+                                      _streamError ?? "ไม่มีสัญญาณภาพ",
                                       style: TextStyle(color: Colors.white),
+                                      textAlign: TextAlign.center,
                                     ),
                                   ],
                                 ),
@@ -256,6 +315,7 @@ class _AddCameraScreenState extends State<AddCameraScreen> {
       margin: EdgeInsets.only(bottom: 15),
       child: TextField(
         controller: controller,
+        onChanged: _onInputChanged,
         obscureText: isPassword,
         decoration: InputDecoration(
           hintText: hint,
