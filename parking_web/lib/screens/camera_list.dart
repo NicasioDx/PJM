@@ -112,9 +112,8 @@ class _CameraListScreenState extends State<CameraListScreen> {
                       context,
                       MaterialPageRoute(
                         builder: (context) => LiveViewScreen(
+                          cameraId: cam['id'],
                           ip: cam['ip_address'],
-                          user: cam['username'],
-                          pass: cam['password'],
                           name: cam['camera_name'],
                         ),
                       ),

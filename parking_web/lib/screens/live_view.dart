@@ -6,8 +6,10 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import '../config/api.dart';
 
 class LiveViewScreen extends StatefulWidget {
-  final String ip, user, pass, name;
-  const LiveViewScreen({super.key, required this.ip, required this.user, required this.pass, required this.name});
+  final int cameraId;
+  final String ip;
+  final String name;
+  const LiveViewScreen({super.key, required this.cameraId, required this.ip, required this.name});
 
   @override
   State<LiveViewScreen> createState() => _LiveViewScreenState();
@@ -45,9 +47,7 @@ class _LiveViewScreenState extends State<LiveViewScreen> {
 
       // ส่ง camera data
       _channel!.sink.add(jsonEncode({
-        'ip': widget.ip,
-        'username': widget.user,
-        'password': widget.pass,
+        'camera_id': widget.cameraId,
       }));
 
       // รับ binary frames

@@ -1,5 +1,6 @@
 import hashlib
 import base64
+import bcrypt
 import psycopg2
 from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
@@ -104,7 +105,26 @@ def release_connection(conn):
 
 
 def hash_password(password: str) -> str:
-    return hashlib.sha256(password.encode('utf-8')).hexdigest()
+    hashed = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+    return hashed.decode('utf-8')
+
+
+def _is_bcrypt_hash(stored_hash: str) -> bool:
+    return stored_hash.startswith("$2a$") or stored_hash.startswith("$2b$") or stored_hash.startswith("$2y$")
+
+
+def verify_password(password: str, stored_hash: str) -> tuple[bool, bool]:
+    """Return (is_valid, needs_upgrade)."""
+    if _is_bcrypt_hash(stored_hash):
+        try:
+            is_valid = bcrypt.checkpw(password.encode('utf-8'), stored_hash.encode('utf-8'))
+            return is_valid, False
+        except ValueError:
+            return False, False
+
+    # Legacy SHA-256 fallback for existing users before bcrypt migration.
+    legacy_valid = hashlib.sha256(password.encode('utf-8')).hexdigest() == stored_hash
+    return legacy_valid, legacy_valid
 
 
 def init_db():
@@ -178,13 +198,12 @@ def get_all_cameras():
         cur = None
         try:
             cur = conn.cursor(cursor_factory=RealDictCursor)
-            cur.execute("SELECT * FROM cameras ORDER BY created_at DESC")
+            cur.execute(
+                "SELECT id, camera_name, ip_address, created_at "
+                "FROM cameras ORDER BY created_at DESC"
+            )
             rows = cur.fetchall()
-            # แปลงเป็น list of dicts เพื่อให้ JSON serializable
-            cameras = [dict(row) for row in rows]
-            for cam in cameras:
-                cam["password"] = decrypt_camera_password(cam["password"])
-            return cameras
+            return [dict(row) for row in rows]
         except Exception as e:
             print(f"Error fetching cameras: {e}")
             return []
@@ -193,6 +212,33 @@ def get_all_cameras():
                 cur.close()
             release_connection(conn)
     return []
+
+
+def get_camera_credentials(camera_id: int):
+    conn = get_connection()
+    if conn:
+        cur = None
+        try:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute(
+                "SELECT ip_address, username, password FROM cameras WHERE id=%s",
+                (camera_id,),
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+
+            cam = dict(row)
+            cam["password"] = decrypt_camera_password(cam["password"])
+            return cam
+        except Exception as e:
+            print(f"Error fetching camera credentials: {e}")
+            return None
+        finally:
+            if cur:
+                cur.close()
+            release_connection(conn)
+    return None
 
 
 def create_user(username: str, password: str) -> UserActionResult:
@@ -236,7 +282,15 @@ def authenticate_user(username: str, password: str) -> UserActionResult:
         if not user:
             return {"status": "invalid_credentials", "message": "Invalid username or password"}
 
-        if user['password_hash'] == hash_password(password):
+        is_valid, needs_upgrade = verify_password(password, user['password_hash'])
+        if is_valid:
+            if needs_upgrade:
+                upgraded_hash = hash_password(password)
+                cur.execute(
+                    "UPDATE users SET password_hash=%s WHERE username=%s",
+                    (upgraded_hash, username),
+                )
+                conn.commit()
             return {"status": "authenticated", "message": "Login successful"}
 
         return {"status": "invalid_credentials", "message": "Invalid username or password"}

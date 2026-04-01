@@ -23,7 +23,7 @@ from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.media import MediaPlayer
 
 # นำเข้าฟังก์ชันจาก database.py
-from database import init_db, add_camera_to_db, get_all_cameras, create_user, authenticate_user, get_connection, release_connection
+from database import init_db, add_camera_to_db, get_all_cameras, create_user, authenticate_user, get_connection, release_connection, get_camera_credentials
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
 logger = logging.getLogger("parking_backend")
@@ -193,10 +193,17 @@ async def websocket_live(websocket: WebSocket):
     # รับ camera data จาก client
     try:
         data = await websocket.receive_json()
-        ip = data['ip']
-        username = data['username']
-        password = data['password']
-        print(f"📡 Received camera data: IP={ip}, User={username}")
+        camera_id = int(data['camera_id'])
+        cam = get_camera_credentials(camera_id)
+        if not cam:
+            await websocket.send_text('error: camera not found')
+            await websocket.close()
+            return
+
+        ip = cam['ip_address']
+        username = cam['username']
+        password = cam['password']
+        print(f"📡 Received camera request: camera_id={camera_id}, IP={ip}")
     except Exception as e:
         print(f"❌ Failed to receive camera data: {e}")
         await websocket.close()
