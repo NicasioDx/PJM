@@ -4,8 +4,11 @@ import 'screens/camera_list.dart';
 import 'screens/login.dart';
 import 'screens/register.dart';
 import 'config/session.dart';
+import 'config/theme_controller.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await AppThemeController.instance.load();
   runApp(const ParkingAIApp());
 }
 
@@ -35,40 +38,69 @@ class ParkingAIApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Parking AI System',
-      theme: ThemeData(
-        primarySwatch: Colors.indigo,
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.indigo,
-          brightness: Brightness.light,
-        ),
-        scaffoldBackgroundColor: Colors.grey[50],
-        appBarTheme: AppBarTheme(
-          backgroundColor: Colors.indigo,
-          foregroundColor: Colors.white,
-          elevation: 4,
-        ),
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
+    return ListenableBuilder(
+      listenable: AppThemeController.instance,
+      builder: (context, _) {
+        return MaterialApp(
+          title: 'Parking AI System',
+          themeMode: AppThemeController.instance.themeMode,
+          theme: ThemeData(
+            primarySwatch: Colors.indigo,
+            useMaterial3: true,
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: Colors.indigo,
+              brightness: Brightness.light,
+            ),
+            scaffoldBackgroundColor: Colors.grey[50],
+            appBarTheme: AppBarTheme(
+              backgroundColor: Colors.indigo,
+              foregroundColor: Colors.white,
+              elevation: 4,
+            ),
+            elevatedButtonTheme: ElevatedButtonThemeData(
+              style: ElevatedButton.styleFrom(
+                padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
+            inputDecorationTheme: InputDecorationTheme(
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              filled: true,
+              fillColor: Colors.white,
             ),
           ),
-        ),
-        inputDecorationTheme: InputDecorationTheme(
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
+          darkTheme: ThemeData(
+            useMaterial3: true,
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: Colors.indigo,
+              brightness: Brightness.dark,
+            ),
+            scaffoldBackgroundColor: const Color(0xFF121212),
+            appBarTheme: const AppBarTheme(
+              backgroundColor: Color(0xFF1E1E1E),
+              foregroundColor: Colors.white,
+              elevation: 2,
+            ),
+            cardTheme: const CardThemeData(
+              color: Color(0xFF1E1E1E),
+            ),
+            inputDecorationTheme: InputDecorationTheme(
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              filled: true,
+              fillColor: const Color(0xFF2A2A2A),
+            ),
           ),
-          filled: true,
-          fillColor: Colors.white,
-        ),
-      ),
-      initialRoute: '/login',
-      onGenerateRoute: _buildRoute,
-      // หน้า LiveView เราจะใช้ Navigator.push แบบส่งค่าแทน
+          initialRoute: '/login',
+          onGenerateRoute: _buildRoute,
+          // หน้า LiveView เราจะใช้ Navigator.push แบบส่งค่าแทน
+        );
+      },
     );
   }
 }

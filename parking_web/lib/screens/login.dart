@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../config/api.dart';
 import '../config/session.dart';
+import '../config/theme_controller.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -55,6 +56,7 @@ class _LoginScreenState extends State<LoginScreen> {
       appBar: AppBar(
         title: const Text('เข้าสู่ระบบ'),
         centerTitle: true,
+        actions: const [ThemeModeToggleButton()],
       ),
       body: Center(
         child: SingleChildScrollView(

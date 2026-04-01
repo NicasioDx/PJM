@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dart:typed_data';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import '../config/api.dart';
+import '../config/theme_controller.dart';
 
 class LiveViewScreen extends StatefulWidget {
   final int cameraId;
@@ -19,6 +20,7 @@ class _LiveViewScreenState extends State<LiveViewScreen> {
   WebSocketChannel? _channel;
   Uint8List? _currentImage;
   bool _isConnected = false;
+  bool _isFullScreen = false;
   int _retryCount = 0;
   static const int _maxRetries = 5;
   late final String _serverUrl;
@@ -98,99 +100,132 @@ class _LiveViewScreenState extends State<LiveViewScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text("ภาพสด: ${widget.name}"),
-        centerTitle: true,
-      ),
-      body: Padding(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Card(
-              elevation: 4,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Padding(
-                padding: EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    Icon(Icons.videocam, color: Theme.of(context).primaryColor),
-                    SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+      appBar: _isFullScreen
+          ? null
+          : AppBar(
+              title: Text("ภาพสด: ${widget.name}"),
+              centerTitle: true,
+              actions: const [ThemeModeToggleButton()],
+            ),
+      body: Stack(
+        children: [
+          Padding(
+            padding: EdgeInsets.all(_isFullScreen ? 0 : 16),
+            child: Column(
+              children: [
+                if (!_isFullScreen)
+                  Card(
+                    elevation: 4,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Row(
                         children: [
-                          Text(
-                            widget.name,
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
+                          Icon(Icons.videocam, color: Theme.of(context).primaryColor),
+                          SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  widget.name,
+                                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                Text(
+                                  'IP: ${widget.ip}',
+                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: Colors.grey[600],
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          Text(
-                            'IP: ${widget.ip}',
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: Colors.grey[600],
+                          Container(
+                            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: _getStatusColor(),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Text(
+                              _getStatusText(),
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
                         ],
                       ),
                     ),
-                    Container(
-                      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: _getStatusColor(),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Text(
-                        _getStatusText(),
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                  ),
+                if (!_isFullScreen) SizedBox(height: 16),
+                Expanded(
+                  child: Card(
+                    elevation: _isFullScreen ? 0 : 4,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(_isFullScreen ? 0 : 12),
                     ),
-                  ],
-                ),
-              ),
-            ),
-            SizedBox(height: 16),
-            Expanded(
-              child: Card(
-                elevation: 4,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Container(
-                  width: double.infinity,
-                  child: _currentImage != null
-                      ? ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Image.memory(
-                            _currentImage!,
-                            fit: BoxFit.contain,
-                            gaplessPlayback: true,
-                          ),
-                        )
-                      : Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              CircularProgressIndicator(),
-                              SizedBox(height: 16),
-                              Text(
-                                _isConnected ? 'กำลังโหลดภาพ...' : 'รอการเชื่อมต่อ...',
-                                style: Theme.of(context).textTheme.bodyLarge,
+                    child: Container(
+                      width: double.infinity,
+                      color: Colors.black,
+                      child: _currentImage != null
+                          ? ClipRRect(
+                              borderRadius: BorderRadius.circular(_isFullScreen ? 0 : 12),
+                              child: Image.memory(
+                                _currentImage!,
+                                fit: BoxFit.contain,
+                                gaplessPlayback: true,
                               ),
-                            ],
-                          ),
-                        ),
+                            )
+                          : Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  CircularProgressIndicator(),
+                                  SizedBox(height: 16),
+                                  Text(
+                                    _isConnected ? 'กำลังโหลดภาพ...' : 'รอการเชื่อมต่อ...',
+                                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: Colors.white),
+                                  ),
+                                ],
+                              ),
+                            ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SafeArea(
+            child: Align(
+              alignment: Alignment.topRight,
+              child: Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Material(
+                  color: Colors.black54,
+                  borderRadius: BorderRadius.circular(24),
+                  child: IconButton(
+                    tooltip: _isFullScreen ? 'ออกจากเต็มจอ' : 'เต็มจอ',
+                    icon: Icon(
+                      _isFullScreen ? Icons.fullscreen_exit : Icons.fullscreen,
+                      color: Colors.white,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _isFullScreen = !_isFullScreen;
+                      });
+                    },
+                  ),
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

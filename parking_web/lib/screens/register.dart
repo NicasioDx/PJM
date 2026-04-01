@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../config/api.dart';
+import '../config/theme_controller.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -61,6 +62,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       appBar: AppBar(
         title: const Text('สมัครสมาชิก'),
         centerTitle: true,
+        actions: const [ThemeModeToggleButton()],
       ),
       body: Center(
         child: SingleChildScrollView(

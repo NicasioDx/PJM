@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'live_view.dart';
 import '../config/api.dart';
 import '../config/session.dart';
+import '../config/theme_controller.dart';
 
 class CameraListScreen extends StatefulWidget {
   const CameraListScreen({super.key});
@@ -38,6 +39,7 @@ class _CameraListScreenState extends State<CameraListScreen> {
         title: const Text("รายการกล้องทั้งหมด"),
         centerTitle: true,
         actions: [
+          const ThemeModeToggleButton(),
           Padding(
             padding: const EdgeInsets.only(right: 8.0),
             child: ElevatedButton.icon(

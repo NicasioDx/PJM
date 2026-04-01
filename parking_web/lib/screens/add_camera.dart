@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:web_socket_channel/web_socket_channel.dart';
 import '../config/api.dart';
+import '../config/theme_controller.dart';
 
 class AddCameraScreen extends StatefulWidget {
   @override
@@ -191,6 +192,7 @@ class _AddCameraScreenState extends State<AddCameraScreen> {
       appBar: AppBar(
         title: Text("เพิ่มกล้องใหม่"),
         centerTitle: true,
+        actions: const [ThemeModeToggleButton()],
       ),
       body: Padding(
         padding: EdgeInsets.all(24),
