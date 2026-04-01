@@ -1,410 +1,170 @@
 ==========================================================
-   คู่มือการติดตั้งและรันระบบ PARKING AI ตั้งแต่เริ่มต้น
+   HOWTO: ติดตั้งและรัน Parking AI (เวอร์ชันปัจจุบัน)
 ==========================================================
 
-เอกสารนี้เป็นคู่มือสำหรับการติดตั้งและรันระบบ Parking AI System
-ตั้งแต่เริ่มต้นสำหรับผู้ที่ต้องการนำโปรเจกต์ไปพัฒนาต่อ
+เอกสารนี้อัปเดตให้ตรงกับโค้ดล่าสุดของโปรเจกต์
 
 ==========================================================
-   ข้อกำหนดเบื้องต้น (Prerequisites)
+   0) สิ่งที่ต้องมี
 ==========================================================
 
-ก่อนเริ่มติดตั้ง ตรวจสอบว่าคุณมีสิ่งต่อไปนี้:
+1. Windows 10/11 (คู่มือนี้ใช้ PowerShell)
+2. Python 3.10+
+3. Flutter SDK
+4. Docker Desktop (ถ้าจะใช้ฐานข้อมูลด้วย Docker)
 
-1. **ระบบปฏิบัติการ**
-   - Windows 10/11 (แนะนำ)
-   - macOS หรือ Linux
-
-2. **ฮาร์ดแวร์ขั้นต่ำ**
-   - RAM: 8GB ขึ้นไป
-   - Storage: 5GB ว่าง
-   - CPU: Intel i5 หรือเทียบเท่า
-
-3. **ซอฟต์แวร์ที่ต้องติดตั้ง**
-
-   3.1 **Python 3.8+**
-   - ดาวน์โหลดจาก: https://www.python.org/downloads/
-   - ตรวจสอบ: python --version
-
-   3.2 **Flutter SDK**
-   - ดาวน์โหลดจาก: https://flutter.dev/docs/get-started/install
-   - เพิ่ม PATH และตรวจสอบ: flutter doctor
-
-   3.3 **Git**
-   - ดาวน์โหลดจาก: https://git-scm.com/downloads
-   - ตรวจสอบ: git --version
-
-   3.4 **Docker Desktop**
-   - ดาวน์โหลดจาก: https://www.docker.com/products/docker-desktop
-   - สำหรับฐานข้อมูล PostgreSQL
-
-   3.5 **Visual Studio Code (แนะนำ)**
-   - ดาวน์โหลดจาก: https://code.visualstudio.com/
-   - Extensions ที่แนะนำ: Flutter, Python, Dart
+ตรวจสอบคำสั่ง:
+- python --version
+- flutter doctor
+- docker --version
 
 ==========================================================
-   ขั้นตอนที่ 1: โคลนและเตรียมโปรเจกต์
+   1) วิธีเร็วสุด: ใช้สคริปต์ setup เครื่องใหม่
 ==========================================================
 
-1. โคลนโปรเจกต์จาก Git:
-   git clone <repository-url>
-   cd PJM
+เปิด PowerShell ที่โฟลเดอร์ PJM แล้วรัน:
 
-2. ตรวจสอบโครงสร้างโฟลเดอร์:
-   PJM/
-   ├── backend/          # FastAPI Backend
-   ├── parking_web/      # Flutter Web Frontend
-   ├── HOWTO.txt         # คู่มือนี้
-   └── README.md         # เอกสารหลัก
+  .\setup_new_machine.ps1
 
-==========================================================
-   ขั้นตอนที่ 2: ตั้งค่าฐานข้อมูลด้วย Docker
-==========================================================
+สคริปต์จะทำให้:
+- สร้าง backend venv
+- ติดตั้ง pip packages ตาม requirements.txt
+- สร้าง backend/.env (ถ้ายังไม่มี)
+- สตาร์ต database ผ่าน docker compose (ถ้าไม่ skip)
+- flutter pub get
 
-**วิธีที่ 1: ใช้ Docker Compose (แนะนำ - อัตโนมัติ)**
-
-1. เปิด Docker Desktop และรอให้พร้อมใช้งาน
-
-2. รันทั้งระบบด้วย Docker Compose:
-   docker-compose up -d
-
-   คำสั่งนี้จะ:
-   - สร้างและรันฐานข้อมูล PostgreSQL
-   - สร้างและรัน Backend API
-   - Backend จะรอฐานข้อมูลพร้อมก่อนเริ่มทำงาน
-
-3. ตรวจสอบ Container:
-   docker-compose ps
-
-   ควรเห็นทั้ง database และ backend รันอยู่
-
-4. ดู logs:
-   docker-compose logs -f
-
-**วิธีที่ 2: รันแยก (สำหรับพัฒนา)**
-
-1. สร้างฐานข้อมูล PostgreSQL เฉพาะ:
-   docker run --name parking-db \
-     -e POSTGRES_PASSWORD=1234 \
-     -e POSTGRES_DB=parking_db \
-     -e POSTGRES_USER=postgres \
-     -p 5432:5432 \
-     -d postgres:13
-
-2. ตรวจสอบ Container:
-   docker ps
-
-3. ทดสอบการเชื่อมต่อ (ไม่บังคับ):
-   docker exec -it parking-db psql -U postgres -d parking_db
+ตัวเลือก:
+- .\setup_new_machine.ps1 -SkipDocker
+- .\setup_new_machine.ps1 -StartBackend
+- .\setup_new_machine.ps1 -StartFrontend
 
 ==========================================================
-   ขั้นตอนที่ 3: ตั้งค่า Backend (FastAPI)
+   2) วิธี manual (ถ้าต้องการควบคุมทีละขั้น)
 ==========================================================
 
-**หากใช้ Docker Compose (ข้ามขั้นตอนนี้ไปได้เลย):**
-Backend จะรันอัตโนมัติใน container
+2.1 Backend
 
-**หากรัน Backend แยก (สำหรับพัฒนา):**
+  cd backend
+  python -m venv venv
+  .\venv\Scripts\activate
+  pip install -r requirements.txt
+  python main.py
 
-1. เข้าโฟลเดอร์ backend:
-   cd backend
+Backend URL:
+- http://localhost:8000
 
-2. สร้าง Virtual Environment:
-   python -m venv venv
+2.2 Frontend (Flutter Web)
 
-3. เปิดใช้งาน venv:
-   # Windows:
-   venv\Scripts\activate
-   # macOS/Linux:
-   source venv/bin/activate
-
-4. ติดตั้ง dependencies:
-   pip install -r requirements.txt
-
-   รายการสำคัญ:
-   - fastapi, uvicorn
-   - opencv-python
-   - ultralytics
-   - psycopg2-binary
-   - aiortc, av (สำหรับ WebRTC/WebSocket)
-
-5. ตรวจสอบไฟล์ database.py:
-   เปิด database.py และตรวจสอบ DB_CONFIG:
-   - host: "localhost" (สำหรับรันแยก)
-   - หรือ DATABASE_URL environment variable (สำหรับ Docker)
-
-6. รัน Backend:
-   python main.py
-
-   ควรเห็น: "INFO: Uvicorn running on http://0.0.0.0:8000"
-
-7. ทดสอบ API:
-   เปิด browser ไป: http://localhost:8000/health
-   ควรได้: {"status": "ok", "database": "connected"}
+  cd parking_web
+  flutter pub get
+  flutter run -d chrome
 
 ==========================================================
-   ขั้นตอนที่ 4: ตั้งค่า Frontend (Flutter Web)
+   3) Environment ที่ต้องรู้
 ==========================================================
 
-1. เข้าโฟลเดอร์ parking_web:
-   cd ../parking_web
+ไฟล์ backend/.env ตัวอย่าง:
 
-2. ตรวจสอบ Flutter:
-   flutter doctor
+  DATABASE_URL=postgresql://postgres:1234@localhost:5432/parking_db
+  CAMERA_CREDENTIAL_KEY=<fernet_key>
 
-   แก้ไขปัญหาที่พบ (Android SDK, etc.)
-
-3. ติดตั้ง dependencies:
-   flutter pub get
-
-   รายการสำคัญ:
-   - http
-   - web_socket_channel
-
-4. รัน Frontend:
-   flutter run -d chrome
-
-   ควรเปิด Chrome และแสดงแอป
+หมายเหตุสำคัญ:
+- CAMERA_CREDENTIAL_KEY ต้องคงที่ใน production
+- เปลี่ยน key ภายหลังอาจทำให้ถอดรหัสรหัสผ่านกล้องเดิมไม่ได้
 
 ==========================================================
-   ขั้นตอนที่ 4.5: รัน Frontend บน Android (Mobile)
+   4) Docker Compose
 ==========================================================
 
-**ข้อกำหนดเพิ่มเติม:**
-- ติดตั้ง Android Studio: https://developer.android.com/studio
-- สร้าง Android Virtual Device (AVD) ใน Android Studio
-- หรือเชื่อมต่อ Android device จริง (เปิด Developer Options > USB Debugging)
+รันระบบ backend + database:
 
-**ขั้นตอน:**
+  docker compose up -d
 
-1. เข้าโฟลเดอร์ parking_web:
-   cd parking_web
+ดูสถานะ:
 
-2. ตรวจสอบ Flutter และ Android:
-   flutter doctor
+  docker compose ps
+  docker compose logs -f
 
-   แก้ไขปัญหา Android SDK และ licenses
+หยุด:
 
-3. ติดตั้ง dependencies:
-   flutter pub get
-
-4. สร้างหรือเปิด Android Emulator:
-   # สร้าง emulator ใหม่:
-   flutter emulators --create
-   # หรือเปิดที่มีอยู่:
-   flutter emulators --launch <emulator_name>
-
-5. ดูอุปกรณ์ที่เชื่อมต่อ:
-   flutter devices
-
-   ควรเห็น Android emulator หรือ device
-
-6. รันบน Android:
-   flutter run -d <device_id>
-
-   เช่น: flutter run -d emulator-5554
-
-   แอปจะ build และรันบน Android device/emulator
-
-**หมายเหตุสำหรับ Mobile:**
-- แอปจะ auto-detect IP ของเซิร์ฟเวอร์ (ไม่ใช้ localhost)
-- ต้องรัน Backend บนเครื่องเดียวกันหรือ IP ที่เข้าถึงได้
-- สำหรับ production เปลี่ยนเป็น HTTPS และ domain จริง
+  docker compose down
 
 ==========================================================
-   ขั้นตอนที่ 5: การใช้งานระบบ
+   5) ฟีเจอร์และพฤติกรรมปัจจุบัน
 ==========================================================
 
-**บน Web:**
-1. เปิด browser ไป: http://localhost:8080 (หรือ port ที่ Flutter กำหนด)
+1. Auth
+- สมัครสมาชิกและล็อกอินได้
+- รหัสผ่านผู้ใช้เก็บแบบ bcrypt
+- ผู้ใช้เก่า SHA-256 จะถูกอัปเกรดเป็น bcrypt ตอนล็อกอินสำเร็จ
 
-**บน Android:**
-1. แอปจะเปิดขึ้นมาทันทีหลังรัน flutter run
-2. ใช้เหมือน Web แต่ UI ปรับให้เหมาะกับ mobile
+2. Camera security
+- รหัสผ่านกล้องเข้ารหัสก่อนเก็บใน DB
+- API รายการกล้องไม่ส่ง credential ไป frontend
+- live stream ใช้ camera_id แล้ว backend ดึง credential เอง
 
-**ขั้นตอนการใช้งาน (ทั้ง Web และ Mobile):**
+3. Streaming
+- WebSocket /ws/live สำหรับหน้าดูกล้อง
+- WebSocket /ws/preview_camera สำหรับหน้าทดสอบกล้องก่อนบันทึก
 
-1. สมัครสมาชิก:
-   - คลิก "สมัครสมาชิก"
-   - กรอก username และ password
-   - คลิก "สมัครสมาชิก"
-
-2. เข้าสู่ระบบ:
-   - กรอก username/password ที่สมัคร
-   - คลิก "เข้าสู่ระบบ"
-
-3. เพิ่มกล้อง:
-   - คลิกปุ่ม + (มุมล่างขวา)
-   - กรอกข้อมูลกล้อง RTSP:
-     - ชื่อกล้อง
-     - IP Address (เช่น: 192.168.1.100)
-     - Username/Password ของกล้อง
-   - คลิก "ทดสอบการเชื่อมต่อ"
-   - คลิก "บันทึก"
-
-4. ดูภาพสด:
-   - คลิกที่กล้องในรายการ
-   - ดูภาพพร้อม AI detection (YOLOv8)
+4. Frontend
+- มี dark mode (สลับและจำค่าได้)
+- หน้าดูกล้องมีปุ่ม fullscreen
+- หน้าที่สำคัญต้องล็อกอินก่อน (route guard)
 
 ==========================================================
-   การปรับแต่งเพิ่มเติม
+   6) API สรุป
 ==========================================================
 
-1. **เปลี่ยนพอร์ต**
-   - Backend: แก้ไข main.py line ที่มี uvicorn.run(..., port=8000)
-   - Frontend: Flutter จะเลือกพอร์ตอัตโนมัติ
+Auth
+- POST /register
+- POST /login
 
-2. **เปลี่ยนฐานข้อมูล**
-   - แก้ไข database.py สำหรับ connection string
-   - หรือใช้ SQLite แทน PostgreSQL (เปลี่ยน import และ connection)
+Camera
+- GET /get_cameras
+- POST /add_camera
 
-3. **ปรับ AI Model**
-   - เปลี่ยนไฟล์ yolov8n.pt เป็นโมเดลอื่น
-   - ปรับ confidence ใน main.py (model(..., conf=0.4))
+Streaming
+- WS /ws/live (payload: camera_id)
+- WS /ws/preview_camera
 
-4. **ปรับ UI**
-   - แก้ไข lib/main.dart สำหรับ theme
-   - แก้ไข lib/screens/ สำหรับ layout
-
-5. **เพิ่มฟีเจอร์**
-   - เพิ่ม API endpoints ใน backend/main.py
-   - เพิ่มหน้าจอใน lib/screens/
-   - เพิ่ม routing ใน lib/main.dart
+System
+- GET /health
+- GET /ping
 
 ==========================================================
-   การจัดการระบบ (System Management)
+   7) Troubleshooting
 ==========================================================
 
-**รันระบบด้วย Docker Compose:**
-- เริ่มระบบ: docker-compose up -d
-- หยุดระบบ: docker-compose down
-- ดู logs: docker-compose logs -f
-- รีสตาร์ท: docker-compose restart
-- ลบ volumes: docker-compose down -v (⚠️ ลบข้อมูลทั้งหมด)
+1. uvicorn main:app แล้ว error Could not import module "main"
+- ให้ cd เข้า backend ก่อน
+- หรือใช้ --app-dir ให้ถูกต้อง
 
-**รันแยก:**
-- หยุดฐานข้อมูล: docker stop parking-db && docker rm parking-db
-- ลบข้อมูล: docker volume rm pjm_postgres_data
+2. WebSocket 403 ผ่าน ngrok
+- restart backend ให้เป็นโค้ดล่าสุด
+- เช็ก BASE_URL ฝั่ง Flutter ให้ตรงโดเมน ngrok ปัจจุบัน
+- full restart แอป (ไม่ใช่แค่ hot reload)
 
-**อัปเดตโค้ด:**
-- Rebuild backend: docker-compose up -d --build backend
-- อัปเดต dependencies: เข้า container และ pip install
+3. frontend build ไม่ผ่าน
+- flutter clean
+- flutter pub get
+- flutter build web
 
-==========================================================
-   การแก้ปัญหา (Troubleshooting)
-==========================================================
-
-1. **Backend ไม่รัน**
-   - เช็ค Python version: python --version (ต้อง 3.8+)
-   - เช็ค venv: ต้อง activate ก่อนรัน
-   - เช็ค dependencies: pip list | grep fastapi
-   - เช็ค port: netstat -ano | findstr 8000
-
-2. **Frontend ไม่ build**
-   - flutter clean && flutter pub get
-   - flutter doctor --android-licenses (ถ้าต้องการ Android)
-   - ลบ pubspec.lock และ pub get ใหม่
-
-3. **ฐานข้อมูลไม่เชื่อมต่อ**
-   - docker ps (เช็ค container รันอยู่)
-   - docker logs parking-db (ดู log)
-   - เช็ค credentials ใน database.py
-
-4. **กล้องไม่เชื่อมต่อ**
-   - เช็ค RTSP URL format: rtsp://user:pass@ip:554/stream2
-   - ทดสอบด้วย VLC player ก่อน
-   - เช็ค firewall และ network
-
-5. **WebRTC/WebSocket ไม่ทำงาน**
-   - ใช้ localhost หรือ HTTPS ใน production
-   - เช็ค browser console สำหรับ errors
-   - ใช้ polling แทน (comment WebSocket code)
+4. เข้าหน้า /add หรือ /list ได้ทั้งที่ยังไม่ล็อกอิน
+- เช็กว่าใช้ build ล่าสุดที่มี route guard แล้ว
+- clear browser storage แล้วลองใหม่
 
 ==========================================================
-   คำสั่งที่มีประโยชน์
+   8) ลำดับใช้งานจริง
 ==========================================================
 
-# Backend
-cd backend
-venv\Scripts\activate  # Windows
-pip install -r requirements.txt
-python main.py
-
-# Frontend Web
-cd parking_web
-flutter pub get
-flutter run -d chrome
-
-# Frontend Android
-cd parking_web
-flutter pub get
-flutter devices  # ดู device id
-flutter run -d <device_id>  # เช่น emulator-5554
-
-# Database
-docker start parking-db
-docker exec -it parking-db psql -U postgres -d parking_db
-
-# Development
-flutter clean && flutter pub get  # Reset Flutter
-pip freeze > requirements.txt     # Update requirements
+1. สตาร์ต backend และ frontend
+2. สมัครสมาชิก
+3. ล็อกอิน
+4. เพิ่มกล้อง (ลอง preview ก่อน)
+5. บันทึกกล้อง
+6. เข้าหน้าดูกล้องแบบ live
 
 ==========================================================
-   แหล่งข้อมูลเพิ่มเติม
-==========================================================
-
-- Flutter Docs: https://flutter.dev/docs
-- FastAPI Docs: https://fastapi.tiangolo.com/
-- YOLOv8: https://docs.ultralytics.com/
-- OpenCV: https://docs.opencv.org/
-- Docker: https://docs.docker.com/
-
-==========================================================
-   การ deploy ไป production
-==========================================================
-
-1. **Backend**: ใช้ Gunicorn + Uvicorn workers
-   pip install gunicorn
-   gunicorn main:app -w 4 -k uvicorn.workers.UvicornWorker
-
-2. **Frontend**: Build สำหรับ web
-   flutter build web
-   serve build/web
-
-3. **Database**: ใช้ managed PostgreSQL (AWS RDS, etc.)
-
-4. **Reverse Proxy**: Nginx สำหรับ load balancing
-
-5. **SSL**: ใช้ Let's Encrypt สำหรับ HTTPS
-
-==========================================================
-   ติดต่อและสนับสนุน
-==========================================================
-
-หากพบปัญหา:
-1. อ่าน Troubleshooting ด้านบน
-2. เช็ค GitHub Issues
-3. สร้าง Issue ใหม่พร้อม log และ error message
-
-ผู้พัฒนา: Maeki
-Email: [your-email@example.com]
-GitHub: https://github.com/maeki
-
-==========================================================
-   อัปเดตล่าสุด: March 2026
-==========================================================
---------------------------------------
-1. เมื่อหน้าเว็บเปิดขึ้นมา (หน้าแรกคือรายการกล้องซึ่งจะยังว่างอยู่)
-2. กดปุ่ม (+) มุมขวาล่างเพื่อไปหน้า "เพิ่มกล้อง"
-3. กรอกข้อมูลกล้อง Tapo:
-   - ชื่อจุดจอด: (เช่น ทางเข้า 1)
-   - IP Address: (ไอพีล่าสุดที่เช็กได้จากแอป Tapo)
-   - Username: (ชื่อบัญชีในหน้า Camera Account)
-   - Password: (รหัสผ่านในหน้า Camera Account)
-4. กดบันทึก ระบบจะเด้งกลับมาหน้ารายชื่อกล้อง
-5. คลิกที่ชื่อกล้องเพื่อดูภาพสด (Live View)
-
-==========================================================
-หมายเหตุ: หากภาพไม่ขึ้น ให้ตรวจสอบว่า Python Terminal มี Error 
-401 หรือไม่ (ถ้ามี 401 แปลว่ารหัสผ่านกล้องผิด)
+   End
 ==========================================================

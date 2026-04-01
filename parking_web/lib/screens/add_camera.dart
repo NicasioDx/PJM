@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -21,6 +22,7 @@ class _AddCameraScreenState extends State<AddCameraScreen> {
   Uint8List? _previewImageBytes;
   bool _isStreaming = false;
   String? _streamError;
+  Timer? _reconnectDebounce;
 
   void _toggleStream() {
     if (_isStreaming) {
@@ -128,9 +130,14 @@ class _AddCameraScreenState extends State<AddCameraScreen> {
   }
 
   void _onInputChanged(String _) {
-    if (_isStreaming) {
-      _startPreviewStream();
-    }
+    if (!_isStreaming) return;
+
+    _reconnectDebounce?.cancel();
+    _reconnectDebounce = Timer(const Duration(milliseconds: 700), () {
+      if (mounted && _isStreaming) {
+        _startPreviewStream();
+      }
+    });
   }
 
   // ฟังก์ชันบันทึกข้อมูลกล้องลงฐานข้อมูล
@@ -178,6 +185,7 @@ class _AddCameraScreenState extends State<AddCameraScreen> {
 
   @override
   void dispose() {
+    _reconnectDebounce?.cancel();
     _previewChannel?.sink.close();
     _nameController.dispose();
     _ipController.dispose();
@@ -218,9 +226,25 @@ class _AddCameraScreenState extends State<AddCameraScreen> {
                       ),
                       SizedBox(height: 24),
                       _buildTextField(_nameController, "ชื่อกล้อง", Icons.camera_alt),
-                      _buildTextField(_ipController, "IP Address", Icons.network_check),
-                      _buildTextField(_userController, "Username", Icons.person),
-                      _buildTextField(_passController, "Password", Icons.lock, isPassword: true),
+                      _buildTextField(
+                        _ipController,
+                        "IP Address",
+                        Icons.network_check,
+                        triggerPreviewReconnect: true,
+                      ),
+                      _buildTextField(
+                        _userController,
+                        "Username",
+                        Icons.person,
+                        triggerPreviewReconnect: true,
+                      ),
+                      _buildTextField(
+                        _passController,
+                        "Password",
+                        Icons.lock,
+                        isPassword: true,
+                        triggerPreviewReconnect: true,
+                      ),
                       SizedBox(height: 30),
                       Center(
                         child: ElevatedButton.icon(
@@ -312,18 +336,23 @@ class _AddCameraScreenState extends State<AddCameraScreen> {
     );
   }
 
-  Widget _buildTextField(TextEditingController controller, String hint, IconData icon, {bool isPassword = false}) {
+  Widget _buildTextField(
+    TextEditingController controller,
+    String hint,
+    IconData icon, {
+    bool isPassword = false,
+    bool triggerPreviewReconnect = false,
+  }) {
     return Container(
       margin: EdgeInsets.only(bottom: 15),
       child: TextField(
         controller: controller,
-        onChanged: _onInputChanged,
+        onChanged: triggerPreviewReconnect ? _onInputChanged : null,
         obscureText: isPassword,
         decoration: InputDecoration(
           hintText: hint,
           prefixIcon: Icon(icon),
           filled: true,
-          fillColor: Colors.white,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(8),
           ),

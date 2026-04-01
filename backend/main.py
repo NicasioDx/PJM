@@ -83,6 +83,10 @@ class CameraRequest(BaseModel):
     username: str
     password: str
 
+
+class CameraByIdRequest(BaseModel):
+    camera_id: int
+
 class WebRTCOffer(BaseModel):
     sdp: str
     type: str
@@ -211,7 +215,7 @@ async def websocket_live(websocket: WebSocket):
     
     # สร้าง RTSP URL
     url = f"rtsp://{username}:{password}@{ip}:554/stream2"
-    print(f"🎥 RTSP URL: {url}")
+    print(f"🎥 Starting live stream for camera_id={camera_id}, ip={ip}")
     
     # เปิด camera
     cap = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
@@ -277,16 +281,16 @@ async def websocket_live(websocket: WebSocket):
             except WebSocketDisconnect:
                 stop_event.set()
                 return
-            except Exception as e:
-                if _is_disconnect_exception(e):
-                    stop_event.set()
-                    return
-                raise
             except RuntimeError as e:
                 # Raised when client disconnects and websocket is already closed.
                 print(f"ℹ️ WebSocket send stopped: {e}")
                 stop_event.set()
                 return
+            except Exception as e:
+                if _is_disconnect_exception(e):
+                    stop_event.set()
+                    return
+                raise
 
             frame_count += 1
 
@@ -354,7 +358,7 @@ async def websocket_preview_camera(websocket: WebSocket):
         password = data['password']
 
         url = f"rtsp://{username}:{password}@{ip}:554/stream2"
-        print(f"🔎 Preview stream open: {url}")
+        print(f"🔎 Preview stream open for ip={ip}")
 
         cap = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
@@ -460,18 +464,16 @@ async def add_camera(data: CameraRegister):
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    print(f"❌ Global error: {exc}")
+    logger.exception("Unhandled server error on %s", request.url.path)
     return JSONResponse(
         status_code=500,
-        content={"detail": "Internal Server Error", "error": str(exc)},
+        content={"detail": "Internal Server Error"},
         headers={
             "Access-Control-Allow-Origin": "*",
             "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
             "Access-Control-Allow-Headers": "*",
         },
     )
-
-from fastapi.responses import JSONResponse
 
 # --- Health & Debug Routes ---
 @app.get("/ping")
@@ -500,14 +502,16 @@ async def get_cameras():
         return cameras
     except Exception as e:
         elapsed = time.time() - request_time
-        print(f"❌ /get_cameras error after {elapsed:.3f}s: {type(e).__name__}: {e}")
-        import traceback
-        traceback.print_exc()
-        return {"error": str(e), "type": type(e).__name__}
+        logger.exception("/get_cameras failed after %.3fs", elapsed)
+        raise HTTPException(status_code=500, detail="Internal Server Error")
 
 @app.post("/get_frame")
-async def get_frame(data: CameraRequest):
-    target_url = f"rtsp://{data.username}:{data.password}@{data.ip}:554/stream2"
+async def get_frame(data: CameraByIdRequest):
+    cam = get_camera_credentials(data.camera_id)
+    if not cam:
+        raise HTTPException(status_code=404, detail="Camera not found")
+
+    target_url = f"rtsp://{cam['username']}:{cam['password']}@{cam['ip_address']}:554/stream2"
     cam_manager.change_camera(target_url)
 
     if cam_manager.status and cam_manager.frame is not None:
@@ -532,9 +536,13 @@ async def get_frame(data: CameraRequest):
     return {"status": "error", "message": "Connecting..."}
 
 @app.post("/preview_camera")
-async def preview_camera(data: CameraRequest):
+async def preview_camera(data: CameraByIdRequest):
     """ฟังก์ชันสำหรับกด Preview ดูภาพก่อนบันทึก"""
-    target_url = f"rtsp://{data.username}:{data.password}@{data.ip}:554/stream2"
+    cam = get_camera_credentials(data.camera_id)
+    if not cam:
+        raise HTTPException(status_code=404, detail="Camera not found")
+
+    target_url = f"rtsp://{cam['username']}:{cam['password']}@{cam['ip_address']}:554/stream2"
     
     # ทดสอบดึงภาพด้วย OpenCV
     cap = cv2.VideoCapture(target_url)

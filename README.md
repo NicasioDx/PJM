@@ -1,211 +1,147 @@
 # Parking AI System
 
-ระบบจัดการที่จอดรถอัจฉริยะที่ใช้ AI สำหรับตรวจจับและนับจำนวนรถในที่จอดรถแบบเรียลไทม์
+ระบบจัดการที่จอดรถอัจฉริยะด้วย AI (YOLOv8) สำหรับดูภาพกล้องและวิเคราะห์ภาพแบบเรียลไทม์
 
-## 🏗️ โครงสร้างโปรเจกต์
+## โครงสร้างโปรเจกต์
 
-```
-PJM/
-├── backend/          # FastAPI Backend
-│   ├── main.py       # Main API server
-│   ├── database.py   # Database operations
-│   ├── requirements.txt
-│   ├── Dockerfile    # Docker configuration
-│   └── yolov8n.pt    # AI Model
-├── parking_web/      # Flutter Web Frontend
-│   ├── lib/
-│   ├── pubspec.yaml
-│   └── README.md
-├── docker-compose.yml # Docker orchestration
-├── HOWTO.txt         # คู่มือการใช้งาน
-└── README.md         # เอกสารหลัก
-```
+- backend: FastAPI + PostgreSQL + OpenCV + YOLOv8
+- parking_web: Flutter Web
+- docker-compose.yml: รันฐานข้อมูลและ backend ด้วย Docker
+- setup_new_machine.ps1: สคริปต์เตรียมเครื่องใหม่แบบรันครั้งเดียว
 
-## 📋 คุณสมบัติหลัก
+## ฟีเจอร์ปัจจุบัน
 
-- 🔐 **ระบบล็อกอิน/สมัครสมาชิก**: การจัดการผู้ใช้ที่ปลอดภัย
-- 📹 **จัดการกล้อง**: เพิ่มและจัดการกล้อง CCTV RTSP
-- 🎥 **ภาพสดจากกล้อง**: ดูภาพจากกล้องแบบเรียลไทม์พร้อม AI detection
-- 🤖 **AI Detection**: ใช้ YOLOv8 สำหรับตรวจจับรถและวัตถุอื่นๆ
-- 🌐 **WebRTC/WebSocket Streaming**: สตรีมมิ่งที่มี latency ต่ำ
-- 📊 **แดชบอร์ด**: ดูรายการกล้องและสถานะการเชื่อมต่อ
-- 🎨 **UI หรูหรา**: ออกแบบด้วย Material Design 3
+- ระบบสมัครสมาชิก/ล็อกอิน
+- เก็บรหัสผ่านผู้ใช้แบบ bcrypt
+- เก็บรหัสผ่านกล้องแบบเข้ารหัส (encryption at rest)
+- รายการกล้องไม่ส่ง credential ออกมาฝั่ง frontend
+- ดูภาพสดผ่าน WebSocket
+- Preview กล้องผ่าน WebSocket แบบ low latency
+- Route guard: หน้าหลักต้องล็อกอินก่อนเข้าถึง
+- Dark mode สลับได้และจำค่าไว้
+- ปุ่มขยายภาพเต็มหน้าจอในหน้าดูกล้อง
 
-## 🛠️ เทคโนโลยีที่ใช้
+## ความปลอดภัยที่ใช้อยู่
 
-### Infrastructure
-- **Docker**: Containerization
-- **Docker Compose**: Container orchestration
-- **PostgreSQL**: Database
+- User password:
+  - ใช้ bcrypt
+  - รองรับบัญชีเก่าแบบ SHA-256 และจะอัปเกรดเป็น bcrypt อัตโนมัติหลังล็อกอินสำเร็จ
+- Camera password:
+  - เข้ารหัสก่อนเก็บใน DB
+  - backend ถอดรหัสเองตอนต้องเชื่อม RTSP
+  - frontend ไม่ได้รับ password จาก API รายการกล้อง
+- คีย์เข้ารหัสกล้อง:
+  - ใช้ CAMERA_CREDENTIAL_KEY จาก environment
 
-### Frontend (Flutter Web)
-- **Flutter**: Framework สำหรับพัฒนา UI
-- **Dart**: ภาษาโปรแกรมมิ่ง
-- **WebRTC/WebSocket**: สำหรับสตรีมมิ่งวิดีโอ
-- **Material Design**: UI components
+## การติดตั้งแบบเร็ว (แนะนำ)
 
-### Backend (FastAPI)
-- **FastAPI**: Web framework ที่รวดเร็ว
-- **OpenCV**: การประมวลผลภาพและวิดีโอ
-- **Ultralytics YOLOv8**: AI สำหรับ object detection
-- **PostgreSQL**: ฐานข้อมูล
-- **RTSP**: โปรโตคอลสำหรับกล้อง CCTV
+### Windows (PowerShell)
 
-## 🚀 การติดตั้งและรัน
+จากโฟลเดอร์โปรเจกต์:
 
-### ข้อกำหนดเบื้องต้น
-- Docker Desktop
-- Python 3.8+ (สำหรับพัฒนา)
-- Flutter 3.0+ (สำหรับพัฒนา)
-- Chrome browser (สำหรับ WebRTC)
-
-### วิธีที่ 1: ใช้ Docker Compose (แนะนำ)
-
-```bash
-# รันทั้งระบบ (ฐานข้อมูล + Backend)
-docker-compose up -d
-
-# รัน Frontend แยก
-cd parking_web
-flutter pub get
-flutter run -d chrome
+```powershell
+.\setup_new_machine.ps1
 ```
 
-### วิธีที่ 2: รันแยก (สำหรับพัฒนา)
+สคริปต์จะทำให้:
 
-#### 1. ตั้งค่าฐานข้อมูล
-```bash
-# รัน PostgreSQL ด้วย Docker
-docker run --name parking-db \
-  -e POSTGRES_PASSWORD=1234 \
-  -e POSTGRES_DB=parking_db \
-  -e POSTGRES_USER=postgres \
-  -p 5432:5432 \
-  -d postgres:13
+- สร้าง backend venv
+- ติดตั้ง Python dependencies
+- สร้าง backend/.env (ถ้ายังไม่มี)
+- สตาร์ตฐานข้อมูลด้วย Docker (ถ้าไม่ใส่ -SkipDocker)
+- flutter pub get
+
+ตัวเลือกเสริม:
+
+```powershell
+.\setup_new_machine.ps1 -SkipDocker
+.\setup_new_machine.ps1 -StartBackend
+.\setup_new_machine.ps1 -StartFrontend
 ```
 
-#### 2. ติดตั้ง Backend
-```bash
+## การรันแบบแยกเอง
+
+### 1) Backend
+
+```powershell
 cd backend
+python -m venv venv
+.\venv\Scripts\activate
 pip install -r requirements.txt
 python main.py
 ```
 
-#### 3. ติดตั้ง Frontend
-```bash
+Backend จะรันที่:
+
+- http://localhost:8000
+
+### 2) Frontend
+
+```powershell
 cd parking_web
 flutter pub get
 flutter run -d chrome
 ```
 
-## 📱 หน้าจอของแอป
+## Environment สำคัญ (backend/.env)
 
-### 1. หน้าเข้าสู่ระบบ
-- เข้าสู่ระบบด้วย username/password
-- ลิงก์ไปหน้า สมัครสมาชิก
+ตัวอย่าง:
 
-### 2. หน้ารายการกล้อง
-- แสดงรายการกล้องทั้งหมด
-- สถานะการเชื่อมต่อ
-- ปุ่มเพิ่มกล้องใหม่
-- ปุ่มออกจากระบบ
+```env
+DATABASE_URL=postgresql://postgres:1234@localhost:5432/parking_db
+CAMERA_CREDENTIAL_KEY=<your_fernet_key>
+```
 
-### 3. หน้าเพิ่มกล้อง
-- ฟอร์มกรอกข้อมูลกล้อง (ชื่อ, IP, username, password)
-- ทดสอบการเชื่อมต่อ
-- ดูภาพตัวอย่าง
+หมายเหตุ:
 
-### 4. หน้าภาพสด
-- ดูภาพจากกล้องแบบเรียลไทม์
-- AI detection overlay
-- สถานะการเชื่อมต่อ
+- โปรดตั้ง CAMERA_CREDENTIAL_KEY ให้คงที่ใน production
+- ถ้าเปลี่ยนคีย์แล้วข้อมูลกล้องเดิมจะถอดรหัสไม่ได้
 
-## 🔌 API Endpoints
+## Docker Compose
 
-### Authentication
-- `POST /login` - เข้าสู่ระบบ
-- `POST /register` - สมัครสมาชิก
+รันฐานข้อมูลและ backend:
 
-### Camera Management
-- `GET /get_cameras` - ดูรายการกล้อง
-- `POST /add_camera` - เพิ่มกล้องใหม่
-- `POST /preview_camera` - ทดสอบการเชื่อมต่อกล้อง
+```powershell
+docker compose up -d
+```
+
+เช็กสถานะ:
+
+```powershell
+docker compose ps
+docker compose logs -f
+```
+
+## API หลัก (ล่าสุด)
+
+### Auth
+
+- POST /register
+- POST /login
+
+### Camera
+
+- GET /get_cameras
+- POST /add_camera
 
 ### Streaming
-- `POST /get_frame` - รับเฟรมภาพ (HTTP polling)
-- `WebSocket /ws/live` - สตรีมมิ่งแบบเรียลไทม์
-- `POST /offer` - WebRTC offer (สำหรับ mobile)
+
+- WebSocket /ws/live
+  - client ส่ง camera_id
+  - server ดึง credential จาก DB เอง
+- WebSocket /ws/preview_camera
+  - ใช้ preview ก่อนบันทึกกล้อง
 
 ### System
-- `GET /health` - เช็คสถานะระบบ
 
-## 🎯 การใช้งาน
+- GET /health
+- GET /ping
 
-1. **เริ่มระบบ**: รัน backend และ frontend
-2. **สมัครสมาชิก**: สร้างบัญชีผู้ใช้
-3. **เข้าสู่ระบบ**: ล็อกอินด้วยข้อมูลที่สมัคร
-4. **เพิ่มกล้อง**: กรอกข้อมูล RTSP ของกล้อง
-5. **ดูภาพสด**: คลิกที่กล้องเพื่อดูภาพพร้อม AI detection
+## หมายเหตุการพัฒนา
 
-## 🔧 การปรับแต่ง
+- build web ล่าสุดผ่านแล้ว
+- หากแก้ config หรือ dependency ควร restart backend/frontend
 
-### AI Model
-- เปลี่ยนโมเดล YOLO ใน `backend/main.py`
-- ปรับ confidence threshold ในโค้ด
+## License
 
-### UI Theme
-- ปรับแต่งสีและธีมใน `parking_web/lib/main.dart`
-- เพิ่มภาษาใน `parking_web/lib/screens/`
-
-### Database
-- ปรับแต่ง schema ใน `backend/database.py`
-- เพิ่มฟีลด์ข้อมูลเพิ่มเติม
-
-## 📈 Performance
-
-- **Latency**: ~200-300ms สำหรับ WebSocket streaming
-- **Frame Rate**: 2 FPS (ปรับได้ในโค้ด)
-- **Resolution**: 640x360 (ปรับได้)
-- **AI Processing**: YOLOv8n บน CPU
-
-## 🐛 การแก้ปัญหา
-
-### Backend ไม่รัน
-- เช็ค Python version และ dependencies
-- ตรวจสอบ PostgreSQL connection
-
-### Frontend ไม่ build
-- รัน `flutter clean` และ `flutter pub get`
-- อัปเดต Flutter SDK
-
-### กล้องไม่เชื่อมต่อ
-- เช็ค RTSP URL และ credentials
-- ตรวจสอบ firewall และ network
-
-### WebRTC ไม่ทำงาน
-- ใช้ HTTPS ใน production
-- เช็ค browser compatibility
-
-## 🤝 การมีส่วนร่วม
-
-1. Fork โปรเจกต์
-2. สร้าง feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit การเปลี่ยนแปลง (`git commit -m 'Add some AmazingFeature'`)
-4. Push ไป branch (`git push origin feature/AmazingFeature`)
-5. เปิด Pull Request
-
-## 📄 License
-
-Distributed under the MIT License. See `LICENSE` for more information.
-
-## 👥 ผู้พัฒนา
-
-- **Maeki** - *Initial work* - [GitHub](https://github.com/maeki)
-
-## 🙏 Acknowledgments
-
-- [Flutter](https://flutter.dev/) - UI Framework
-- [FastAPI](https://fastapi.tiangolo.com/) - Web Framework
-- [Ultralytics YOLO](https://github.com/ultralytics/ultralytics) - AI Model
-- [OpenCV](https://opencv.org/) - Computer Vision
-- [Material Design](https://material.io/) - Design System
+MIT
