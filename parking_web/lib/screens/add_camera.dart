@@ -14,7 +14,6 @@ class AddCameraScreen extends StatefulWidget {
 
 class _AddCameraScreenState extends State<AddCameraScreen> {
   final _nameController = TextEditingController();
-  final _zoneController = TextEditingController(text: 'ทั่วไป');
   final _ipController = TextEditingController();
   final _userController = TextEditingController();
   final _passController = TextEditingController();
@@ -157,7 +156,6 @@ class _AddCameraScreenState extends State<AddCameraScreen> {
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
           "camera_name": _nameController.text,
-          "zone_name": _zoneController.text.trim().isEmpty ? 'ทั่วไป' : _zoneController.text.trim(),
           "ip": _ipController.text,
           "username": _userController.text,
           "password": _passController.text,
@@ -190,7 +188,6 @@ class _AddCameraScreenState extends State<AddCameraScreen> {
     _reconnectDebounce?.cancel();
     _previewChannel?.sink.close();
     _nameController.dispose();
-    _zoneController.dispose();
     _ipController.dispose();
     _userController.dispose();
     _passController.dispose();
@@ -229,7 +226,6 @@ class _AddCameraScreenState extends State<AddCameraScreen> {
                       ),
                       SizedBox(height: 24),
                       _buildTextField(_nameController, "ชื่อกล้อง", Icons.camera_alt),
-                      _buildTextField(_zoneController, "โซน (เช่น Zone A)", Icons.map),
                       _buildTextField(
                         _ipController,
                         "IP Address",

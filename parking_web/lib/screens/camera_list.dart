@@ -13,24 +13,6 @@ class CameraListScreen extends StatefulWidget {
 }
 
 class _CameraListScreenState extends State<CameraListScreen> {
-  String _role = 'customer';
-
-  @override
-  void initState() {
-    super.initState();
-    _loadRole();
-  }
-
-  Future<void> _loadRole() async {
-    final role = await SessionStore.getRole();
-    if (!mounted) return;
-    setState(() {
-      _role = role;
-    });
-  }
-
-  bool get _isAdmin => _role.toLowerCase() == 'admin';
-
   Future<List> _fetchCameras() async {
     final response = await http.get(
       Uri.parse('$BASE_URL/get_cameras'),
@@ -54,19 +36,9 @@ class _CameraListScreenState extends State<CameraListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isAdmin ? 'รายการกล้องทั้งหมด (แอดมิน)' : 'รายการกล้องของลูกค้า'),
+        title: const Text("รายการกล้องทั้งหมด"),
         centerTitle: true,
         actions: [
-          IconButton(
-            onPressed: () {
-              Navigator.pushNamed(
-                context,
-                _isAdmin ? '/admin/history' : '/history',
-              );
-            },
-            icon: const Icon(Icons.history),
-            tooltip: 'ประวัติการเข้าจอด',
-          ),
           const ThemeModeToggleButton(),
           Padding(
             padding: const EdgeInsets.only(right: 8.0),
@@ -105,7 +77,7 @@ class _CameraListScreenState extends State<CameraListScreen> {
                   ),
                   SizedBox(height: 8),
                   Text(
-                    _isAdmin ? 'กดปุ่ม + เพื่อเพิ่มกล้องใหม่' : 'ยังไม่มีกล้องที่พร้อมใช้งาน',
+                    'กดปุ่ม + เพื่อเพิ่มกล้องใหม่',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: Colors.grey,
                     ),
@@ -135,7 +107,7 @@ class _CameraListScreenState extends State<CameraListScreen> {
                     cam['camera_name'],
                     style: TextStyle(fontWeight: FontWeight.bold),
                   ),
-                  subtitle: Text("โซน: ${cam['zone_name'] ?? 'ทั่วไป'} | IP: ${cam['ip_address']}"),
+                  subtitle: Text("IP: ${cam['ip_address']}"),
                   trailing: Icon(Icons.arrow_forward_ios),
                   onTap: () {
                     Navigator.push(
@@ -155,13 +127,11 @@ class _CameraListScreenState extends State<CameraListScreen> {
           );
         },
       ),
-      floatingActionButton: _isAdmin
-          ? FloatingActionButton(
-              onPressed: () => Navigator.pushNamed(context, '/add'),
-              tooltip: 'เพิ่มกล้องใหม่',
-              child: const Icon(Icons.add),
-            )
-          : null,
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => Navigator.pushNamed(context, '/add'),
+        tooltip: 'เพิ่มกล้องใหม่',
+        child: const Icon(Icons.add),
+      ),
     );
   }
 }

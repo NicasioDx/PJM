@@ -38,10 +38,7 @@ class _LoginScreenState extends State<LoginScreen> {
     );
 
     if (response.statusCode == 200) {
-      final body = jsonDecode(response.body);
       await SessionStore.setLoggedIn(true);
-      await SessionStore.setUsername((body['username'] ?? _userController.text.trim()).toString());
-      await SessionStore.setRole((body['role'] ?? 'customer').toString());
       if (!mounted) return;
       Navigator.pushReplacementNamed(context, '/list');
     } else {

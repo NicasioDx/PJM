@@ -41,13 +41,6 @@ class UserActionResult(TypedDict):
     message: str
 
 
-class LoginResult(TypedDict):
-    status: Literal["authenticated", "invalid_credentials", "db_unavailable", "db_error"]
-    message: str
-    username: str
-    role: str
-
-
 def _get_camera_cipher() -> Fernet:
     global _CAMERA_CIPHER
     if _CAMERA_CIPHER is None:
@@ -140,7 +133,6 @@ def init_db():
     CREATE TABLE IF NOT EXISTS cameras (
         id SERIAL PRIMARY KEY,
         camera_name VARCHAR(100) NOT NULL,
-        zone_name VARCHAR(100) NOT NULL DEFAULT 'ทั่วไป',
         ip_address VARCHAR(50) NOT NULL,
         username VARCHAR(100) NOT NULL,
         password VARCHAR(100) NOT NULL,
@@ -152,24 +144,8 @@ def init_db():
     CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
         username VARCHAR(100) UNIQUE NOT NULL,
-        role VARCHAR(20) NOT NULL DEFAULT 'customer',
         password_hash VARCHAR(256) NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    """
-
-    parking_history_query = """
-    CREATE TABLE IF NOT EXISTS parking_history (
-        id SERIAL PRIMARY KEY,
-        username VARCHAR(100) NOT NULL,
-        camera_id INT NOT NULL,
-        zone_name VARCHAR(100) NOT NULL,
-        event_type VARCHAR(30) NOT NULL DEFAULT 'parking_success',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        CONSTRAINT fk_parking_history_camera
-            FOREIGN KEY(camera_id)
-                REFERENCES cameras(id)
-                ON DELETE CASCADE
     );
     """
 
@@ -180,12 +156,8 @@ def init_db():
             cur = conn.cursor()
             cur.execute(camera_query)
             cur.execute(user_query)
-            cur.execute(parking_history_query)
             # Ensure encrypted camera password tokens can be stored.
             cur.execute("ALTER TABLE cameras ALTER COLUMN password TYPE TEXT")
-            # Safe schema migrations for existing tables.
-            cur.execute("ALTER TABLE cameras ADD COLUMN IF NOT EXISTS zone_name VARCHAR(100) NOT NULL DEFAULT 'ทั่วไป'")
-            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'customer'")
             conn.commit()
             print("✅ Database initialized successfully")
         finally:
@@ -195,7 +167,7 @@ def init_db():
 
 
 # ฟังก์ชันช่วยเหลือสำหรับ API
-def add_camera_to_db(name, ip, user, pw, zone_name: str = "ทั่วไป"):
+def add_camera_to_db(name, ip, user, pw):
     conn = get_connection()
     if conn:
         cur = None
@@ -203,8 +175,8 @@ def add_camera_to_db(name, ip, user, pw, zone_name: str = "ทั่วไป"):
             encrypted_pw = encrypt_camera_password(pw)
             cur = conn.cursor()
             cur.execute(
-                "INSERT INTO cameras (camera_name, zone_name, ip_address, username, password) VALUES (%s, %s, %s, %s, %s)",
-                (name, zone_name, ip, user, encrypted_pw)
+                "INSERT INTO cameras (camera_name, ip_address, username, password) VALUES (%s, %s, %s, %s)",
+                (name, ip, user, encrypted_pw)
             )
             conn.commit()
             return True
@@ -227,7 +199,7 @@ def get_all_cameras():
         try:
             cur = conn.cursor(cursor_factory=RealDictCursor)
             cur.execute(
-                "SELECT id, camera_name, zone_name, ip_address, created_at "
+                "SELECT id, camera_name, ip_address, created_at "
                 "FROM cameras ORDER BY created_at DESC"
             )
             rows = cur.fetchall()
@@ -298,33 +270,20 @@ def create_user(username: str, password: str) -> UserActionResult:
         release_connection(conn)
 
 
-def authenticate_user(username: str, password: str) -> LoginResult:
+def authenticate_user(username: str, password: str) -> UserActionResult:
     conn = get_connection()
     if not conn:
-        return {
-            "status": "db_unavailable",
-            "message": "Database connection is not available",
-            "username": username,
-            "role": "customer",
-        }
+        return {"status": "db_unavailable", "message": "Database connection is not available"}
     cur = None
     try:
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT username, role, password_hash FROM users WHERE username=%s", (username,))
+        cur.execute("SELECT password_hash FROM users WHERE username=%s", (username,))
         user = cur.fetchone()
         if not user:
-            return {
-                "status": "invalid_credentials",
-                "message": "Invalid username or password",
-                "username": username,
-                "role": "customer",
-            }
+            return {"status": "invalid_credentials", "message": "Invalid username or password"}
 
         is_valid, needs_upgrade = verify_password(password, user['password_hash'])
         if is_valid:
-            resolved_role = user.get('role') or 'customer'
-            if username.lower() == 'admin' and resolved_role == 'customer':
-                resolved_role = 'admin'
             if needs_upgrade:
                 upgraded_hash = hash_password(password)
                 cur.execute(
@@ -332,94 +291,12 @@ def authenticate_user(username: str, password: str) -> LoginResult:
                     (upgraded_hash, username),
                 )
                 conn.commit()
-            return {
-                "status": "authenticated",
-                "message": "Login successful",
-                "username": user['username'],
-                "role": resolved_role,
-            }
+            return {"status": "authenticated", "message": "Login successful"}
 
-        return {
-            "status": "invalid_credentials",
-            "message": "Invalid username or password",
-            "username": username,
-            "role": "customer",
-        }
+        return {"status": "invalid_credentials", "message": "Invalid username or password"}
     except Exception as e:
         print(f"Error authenticating user: {e}")
-        return {
-            "status": "db_error",
-            "message": "Unexpected database error while authenticating user",
-            "username": username,
-            "role": "customer",
-        }
-    finally:
-        if cur:
-            cur.close()
-        release_connection(conn)
-
-
-def add_parking_history(username: str, camera_id: int, event_type: str = "parking_success") -> bool:
-    conn = get_connection()
-    if not conn:
-        return False
-
-    cur = None
-    try:
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT zone_name FROM cameras WHERE id=%s", (camera_id,))
-        camera = cur.fetchone()
-        if not camera:
-            return False
-
-        cur.execute(
-            "INSERT INTO parking_history (username, camera_id, zone_name, event_type) VALUES (%s, %s, %s, %s)",
-            (username, camera_id, camera['zone_name'], event_type),
-        )
-        conn.commit()
-        return True
-    except Exception as e:
-        print(f"Error adding parking history: {e}")
-        if conn:
-            conn.rollback()
-        return False
-    finally:
-        if cur:
-            cur.close()
-        release_connection(conn)
-
-
-def get_parking_history(username: str | None = None, zone_name: str | None = None):
-    conn = get_connection()
-    if not conn:
-        return []
-
-    cur = None
-    try:
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        query = (
-            "SELECT ph.id, ph.username, ph.camera_id, c.camera_name, ph.zone_name, ph.event_type, ph.created_at "
-            "FROM parking_history ph "
-            "JOIN cameras c ON c.id = ph.camera_id "
-            "WHERE 1=1"
-        )
-        params = []
-
-        if username:
-            query += " AND ph.username = %s"
-            params.append(username)
-
-        if zone_name:
-            query += " AND ph.zone_name = %s"
-            params.append(zone_name)
-
-        query += " ORDER BY ph.created_at DESC"
-        cur.execute(query, tuple(params))
-        rows = cur.fetchall()
-        return [dict(row) for row in rows]
-    except Exception as e:
-        print(f"Error fetching parking history: {e}")
-        return []
+        return {"status": "db_error", "message": "Unexpected database error while authenticating user"}
     finally:
         if cur:
             cur.close()

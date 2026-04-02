@@ -23,18 +23,7 @@ from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.media import MediaPlayer
 
 # นำเข้าฟังก์ชันจาก database.py
-from database import (
-    init_db,
-    add_camera_to_db,
-    get_all_cameras,
-    create_user,
-    authenticate_user,
-    get_connection,
-    release_connection,
-    get_camera_credentials,
-    add_parking_history,
-    get_parking_history,
-)
+from database import init_db, add_camera_to_db, get_all_cameras, create_user, authenticate_user, get_connection, release_connection, get_camera_credentials
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
 logger = logging.getLogger("parking_backend")
@@ -85,7 +74,6 @@ app.add_middleware(
 # --- Models ---
 class CameraRegister(BaseModel):
     camera_name: str
-    zone_name: str = "ทั่วไป"
     ip: str
     username: str
     password: str
@@ -111,12 +99,6 @@ class UserRegister(BaseModel):
 class UserLogin(BaseModel):
     username: str
     password: str
-
-
-class ParkingHistoryCreate(BaseModel):
-    username: str
-    camera_id: int
-    event_type: str = "parking_success"
 
 # --- User Management ---
 
@@ -146,12 +128,7 @@ async def login(data: UserLogin):
 
     if result["status"] == "authenticated":
         logger.info("LOGIN_SUCCESS username=%s", data.username)
-        return {
-            "status": "success",
-            "message": result["message"],
-            "username": result.get("username", data.username),
-            "role": result.get("role", "customer"),
-        }
+        return {"status": "success", "message": result["message"]}
 
     if result["status"] == "invalid_credentials":
         logger.warning("LOGIN_INVALID_CREDENTIALS username=%s", data.username)
@@ -480,7 +457,7 @@ cam_manager = CameraStream()
 
 @app.post("/add_camera")
 async def add_camera(data: CameraRegister):
-    success = add_camera_to_db(data.camera_name, data.ip, data.username, data.password, data.zone_name)
+    success = add_camera_to_db(data.camera_name, data.ip, data.username, data.password)
     if success:
         return {"status": "success", "message": "Camera added"}
     raise HTTPException(status_code=500, detail="Failed to add camera")
@@ -527,24 +504,6 @@ async def get_cameras():
         elapsed = time.time() - request_time
         logger.exception("/get_cameras failed after %.3fs", elapsed)
         raise HTTPException(status_code=500, detail="Internal Server Error")
-
-
-@app.post("/parking_history/log")
-async def parking_history_log(data: ParkingHistoryCreate):
-    ok = add_parking_history(data.username, data.camera_id, data.event_type)
-    if not ok:
-        raise HTTPException(status_code=400, detail="Failed to record parking history")
-    return {"status": "success", "message": "Parking history recorded"}
-
-
-@app.get("/parking_history")
-async def parking_history(username: str):
-    return get_parking_history(username=username)
-
-
-@app.get("/parking_history/admin")
-async def parking_history_admin(zone: str | None = None):
-    return get_parking_history(zone_name=zone)
 
 @app.post("/get_frame")
 async def get_frame(data: CameraByIdRequest):
