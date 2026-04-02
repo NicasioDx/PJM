@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'live_view.dart';
+import 'parking_history.dart';
 import '../config/api.dart';
 import '../config/session.dart';
 import '../config/theme_controller.dart';
@@ -13,6 +14,21 @@ class CameraListScreen extends StatefulWidget {
 }
 
 class _CameraListScreenState extends State<CameraListScreen> {
+  bool _isAdmin = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRole();
+  }
+
+  Future<void> _loadRole() async {
+    final role = await SessionStore.getRole();
+    setState(() {
+      _isAdmin = role == 'admin';
+    });
+  }
+
   Future<List> _fetchCameras() async {
     final response = await http.get(
       Uri.parse('$BASE_URL/get_cameras'),
@@ -36,9 +52,21 @@ class _CameraListScreenState extends State<CameraListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("รายการกล้องทั้งหมด"),
+        title: Text(_isAdmin ? "รายการกล้องทั้งหมด (แอดมิน)" : "รายการกล้องของลูกค้า"),
         centerTitle: true,
         actions: [
+          IconButton(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => ParkingHistoryScreen(isAdmin: _isAdmin),
+                ),
+              );
+            },
+            icon: const Icon(Icons.history),
+            tooltip: 'ประวัติการจอด',
+          ),
           const ThemeModeToggleButton(),
           Padding(
             padding: const EdgeInsets.only(right: 8.0),
@@ -76,12 +104,13 @@ class _CameraListScreenState extends State<CameraListScreen> {
                     style: Theme.of(context).textTheme.headlineSmall,
                   ),
                   SizedBox(height: 8),
-                  Text(
-                    'กดปุ่ม + เพื่อเพิ่มกล้องใหม่',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Colors.grey,
+                  if (_isAdmin)
+                    Text(
+                      'กดปุ่ม + เพื่อเพิ่มกล้องใหม่',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Colors.grey,
+                      ),
                     ),
-                  ),
                 ],
               ),
             );
@@ -107,7 +136,13 @@ class _CameraListScreenState extends State<CameraListScreen> {
                     cam['camera_name'],
                     style: TextStyle(fontWeight: FontWeight.bold),
                   ),
-                  subtitle: Text("IP: ${cam['ip_address']}"),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text("IP: ${cam['ip_address']}"),
+                      Text("โซน: ${cam['zone_name'] ?? 'ทั่วไป'}"),
+                    ],
+                  ),
                   trailing: Icon(Icons.arrow_forward_ios),
                   onTap: () {
                     Navigator.push(
@@ -127,11 +162,13 @@ class _CameraListScreenState extends State<CameraListScreen> {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => Navigator.pushNamed(context, '/add'),
-        tooltip: 'เพิ่มกล้องใหม่',
-        child: const Icon(Icons.add),
-      ),
+      floatingActionButton: _isAdmin
+          ? FloatingActionButton(
+              onPressed: () => Navigator.pushNamed(context, '/add'),
+              tooltip: 'เพิ่มกล้องใหม่',
+              child: const Icon(Icons.add),
+            )
+          : null,
     );
   }
 }

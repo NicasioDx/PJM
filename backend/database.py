@@ -136,6 +136,7 @@ def init_db():
         ip_address VARCHAR(50) NOT NULL,
         username VARCHAR(100) NOT NULL,
         password VARCHAR(100) NOT NULL,
+        zone_name VARCHAR(100) NOT NULL DEFAULT 'ทั่วไป',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
     """
@@ -145,8 +146,24 @@ def init_db():
         id SERIAL PRIMARY KEY,
         username VARCHAR(100) UNIQUE NOT NULL,
         password_hash VARCHAR(256) NOT NULL,
+        role VARCHAR(20) NOT NULL DEFAULT 'customer',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
+    """
+
+    parking_history_query = """
+    CREATE TABLE IF NOT EXISTS parking_history (
+        id SERIAL PRIMARY KEY,
+        username VARCHAR(100) NOT NULL,
+        camera_id INTEGER NOT NULL,
+        zone_name VARCHAR(100) NOT NULL DEFAULT 'ทั่วไป',
+        event_type VARCHAR(50) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(camera_id) REFERENCES cameras(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_parking_history_username ON parking_history(username);
+    CREATE INDEX IF NOT EXISTS idx_parking_history_zone ON parking_history(zone_name);
+    CREATE INDEX IF NOT EXISTS idx_parking_history_created ON parking_history(created_at DESC);
     """
 
     conn = get_connection()
@@ -156,8 +173,12 @@ def init_db():
             cur = conn.cursor()
             cur.execute(camera_query)
             cur.execute(user_query)
+            cur.execute(parking_history_query)
             # Ensure encrypted camera password tokens can be stored.
             cur.execute("ALTER TABLE cameras ALTER COLUMN password TYPE TEXT")
+            # Add columns if they don't exist (for existing tables)
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'customer'")
+            cur.execute("ALTER TABLE cameras ADD COLUMN IF NOT EXISTS zone_name VARCHAR(100) NOT NULL DEFAULT 'ทั่วไป'")
             conn.commit()
             print("✅ Database initialized successfully")
         finally:
@@ -167,7 +188,7 @@ def init_db():
 
 
 # ฟังก์ชันช่วยเหลือสำหรับ API
-def add_camera_to_db(name, ip, user, pw):
+def add_camera_to_db(name, ip, user, pw, zone_name="ทั่วไป"):
     conn = get_connection()
     if conn:
         cur = None
@@ -175,8 +196,8 @@ def add_camera_to_db(name, ip, user, pw):
             encrypted_pw = encrypt_camera_password(pw)
             cur = conn.cursor()
             cur.execute(
-                "INSERT INTO cameras (camera_name, ip_address, username, password) VALUES (%s, %s, %s, %s)",
-                (name, ip, user, encrypted_pw)
+                "INSERT INTO cameras (camera_name, ip_address, username, password, zone_name) VALUES (%s, %s, %s, %s, %s)",
+                (name, ip, user, encrypted_pw, zone_name)
             )
             conn.commit()
             return True
@@ -297,6 +318,99 @@ def authenticate_user(username: str, password: str) -> UserActionResult:
     except Exception as e:
         print(f"Error authenticating user: {e}")
         return {"status": "db_error", "message": "Unexpected database error while authenticating user"}
+    finally:
+        if cur:
+            cur.close()
+        release_connection(conn)
+
+
+def add_parking_history(username: str, camera_id: int, event_type: str = "parking_success") -> bool:
+    """บันทึกประวัติการเข้าจอด"""
+    conn = get_connection()
+    if not conn:
+        return False
+    cur = None
+    try:
+        cur = conn.cursor()
+        # Get zone_name from camera
+        cur.execute("SELECT zone_name FROM cameras WHERE id=%s", (camera_id,))
+        camera = cur.fetchone()
+        zone_name = camera[0] if camera else "ทั่วไป"
+        
+        # Insert parking history
+        cur.execute(
+            "INSERT INTO parking_history (username, camera_id, zone_name, event_type) VALUES (%s, %s, %s, %s)",
+            (username, camera_id, zone_name, event_type)
+        )
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Error adding parking history: {e}")
+        if conn:
+            conn.rollback()
+        return False
+    finally:
+        if cur:
+            cur.close()
+        release_connection(conn)
+
+
+def get_parking_history(username: str = None, zone_name: str = None, limit: int = 100) -> list:
+    """ดึงประวัติการเข้าจอด"""
+    conn = get_connection()
+    if not conn:
+        return []
+    cur = None
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        query = "SELECT username, camera_id, zone_name, event_type, created_at FROM parking_history WHERE 1=1"
+        params = []
+        
+        if username:
+            query += " AND username=%s"
+            params.append(username)
+        
+        if zone_name:
+            query += " AND zone_name=%s"
+            params.append(zone_name)
+        
+        query += " ORDER BY created_at DESC LIMIT %s"
+        params.append(limit)
+        
+        cur.execute(query, tuple(params))
+        rows = cur.fetchall()
+        return [dict(row) for row in rows]
+    except Exception as e:
+        print(f"Error fetching parking history: {e}")
+        return []
+    finally:
+        if cur:
+            cur.close()
+        release_connection(conn)
+
+
+def get_user_role(username: str) -> str:
+    """ดึงบทบาทของผู้ใช้"""
+    conn = get_connection()
+    if not conn:
+        return "customer"
+    cur = None
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT role FROM users WHERE username=%s", (username,))
+        user = cur.fetchone()
+        if user and user.get('role'):
+            # Auto-promote admin user
+            if username.lower() == 'admin' and user['role'] == 'customer':
+                cur.execute("UPDATE users SET role=%s WHERE username=%s", ('admin', username))
+                conn.commit()
+                return 'admin'
+            return user['role']
+        return 'customer'
+    except Exception as e:
+        print(f"Error fetching user role: {e}")
+        return 'customer'
     finally:
         if cur:
             cur.close()

@@ -17,6 +17,7 @@ class _AddCameraScreenState extends State<AddCameraScreen> {
   final _ipController = TextEditingController();
   final _userController = TextEditingController();
   final _passController = TextEditingController();
+  final _zoneController = TextEditingController(text: 'ทั่วไป');
 
   WebSocketChannel? _previewChannel;
   Uint8List? _previewImageBytes;
@@ -159,6 +160,7 @@ class _AddCameraScreenState extends State<AddCameraScreen> {
           "ip": _ipController.text,
           "username": _userController.text,
           "password": _passController.text,
+          "zone_name": _zoneController.text.trim().isEmpty ? 'ทั่วไป' : _zoneController.text.trim(),
         }),
       );
 
@@ -191,6 +193,7 @@ class _AddCameraScreenState extends State<AddCameraScreen> {
     _ipController.dispose();
     _userController.dispose();
     _passController.dispose();
+    _zoneController.dispose();
     super.dispose();
   }
 
@@ -245,6 +248,7 @@ class _AddCameraScreenState extends State<AddCameraScreen> {
                         isPassword: true,
                         triggerPreviewReconnect: true,
                       ),
+                      _buildTextField(_zoneController, "โซน (เช่น Zone A)", Icons.map),
                       SizedBox(height: 30),
                       Center(
                         child: ElevatedButton.icon(

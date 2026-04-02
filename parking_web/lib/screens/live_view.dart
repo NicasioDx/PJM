@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'dart:async';
 import 'dart:typed_data';
+import 'package:http/http.dart' as http;
 import 'package:web_socket_channel/web_socket_channel.dart';
 import '../config/api.dart';
+import '../config/session.dart';
 import '../config/theme_controller.dart';
 
 class LiveViewScreen extends StatefulWidget {
@@ -21,6 +23,7 @@ class _LiveViewScreenState extends State<LiveViewScreen> {
   Uint8List? _currentImage;
   bool _isConnected = false;
   bool _isFullScreen = false;
+  bool _isSavingHistory = false;
   int _retryCount = 0;
   static const int _maxRetries = 5;
   late final String _serverUrl;
@@ -89,6 +92,54 @@ class _LiveViewScreenState extends State<LiveViewScreen> {
         _connectWebSocket();
       }
     });
+  }
+
+  Future<void> _markParkingSuccess() async {
+    setState(() {
+      _isSavingHistory = true;
+    });
+
+    try {
+      final username = await SessionStore.getUsername();
+      final response = await http.post(
+        Uri.parse('$BASE_URL/parking_history/log'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'username': username,
+          'camera_id': widget.cameraId,
+          'event_type': 'parking_success',
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('บันทึกประวัติการจอดเรียบร้อย'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('เกิดข้อผิดพลาดในการบันทึก'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      print('Error marking parking success: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('ข้อผิดพลาด: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      setState(() {
+        _isSavingHistory = false;
+      });
+    }
   }
 
   @override
@@ -198,6 +249,24 @@ class _LiveViewScreenState extends State<LiveViewScreen> {
                     ),
                   ),
                 ),
+                if (!_isFullScreen) SizedBox(height: 16),
+                if (!_isFullScreen)
+                  ElevatedButton.icon(
+                    onPressed: _isSavingHistory ? null : _markParkingSuccess,
+                    icon: _isSavingHistory
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.check_circle),
+                    label: Text(_isSavingHistory ? 'กำลังบันทึก...' : 'เข้าจอดสำเร็จ'),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
               ],
             ),
           ),

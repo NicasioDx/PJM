@@ -23,7 +23,11 @@ from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.media import MediaPlayer
 
 # นำเข้าฟังก์ชันจาก database.py
-from database import init_db, add_camera_to_db, get_all_cameras, create_user, authenticate_user, get_connection, release_connection, get_camera_credentials
+from database import (
+    init_db, add_camera_to_db, get_all_cameras, create_user, authenticate_user,
+    get_connection, release_connection, get_camera_credentials,
+    add_parking_history, get_parking_history, get_user_role
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
 logger = logging.getLogger("parking_backend")
@@ -77,6 +81,7 @@ class CameraRegister(BaseModel):
     ip: str
     username: str
     password: str
+    zone_name: str = "ทั่วไป"
 
 class CameraRequest(BaseModel):
     ip: str
@@ -99,6 +104,11 @@ class UserRegister(BaseModel):
 class UserLogin(BaseModel):
     username: str
     password: str
+
+class ParkingHistoryLog(BaseModel):
+    username: str
+    camera_id: int
+    event_type: str = "parking_success"
 
 # --- User Management ---
 
@@ -128,7 +138,13 @@ async def login(data: UserLogin):
 
     if result["status"] == "authenticated":
         logger.info("LOGIN_SUCCESS username=%s", data.username)
-        return {"status": "success", "message": result["message"]}
+        role = get_user_role(data.username)
+        return {
+            "status": "success",
+            "message": result["message"],
+            "username": data.username,
+            "role": role
+        }
 
     if result["status"] == "invalid_credentials":
         logger.warning("LOGIN_INVALID_CREDENTIALS username=%s", data.username)
@@ -140,6 +156,43 @@ async def login(data: UserLogin):
 
     logger.error("LOGIN_DB_ERROR username=%s", data.username)
     raise HTTPException(status_code=500, detail=result["message"])
+
+
+# --- Parking History Management ---
+
+@app.post("/parking_history/log")
+async def log_parking_history(data: ParkingHistoryLog):
+    """บันทึกประวัติการเข้าจอด"""
+    success = add_parking_history(data.username, data.camera_id, data.event_type)
+    
+    if success:
+        logger.info("PARKING_LOG_SUCCESS username=%s camera_id=%s", data.username, data.camera_id)
+        return {"status": "success", "message": "Parking history logged"}
+    
+    logger.error("PARKING_LOG_ERROR username=%s camera_id=%s", data.username, data.camera_id)
+    raise HTTPException(status_code=500, detail="Failed to log parking history")
+
+
+@app.get("/parking_history")
+async def get_user_parking_history(username: str, limit: int = 100):
+    """ดึงประวัติการเข้าจอดของผู้ใช้"""
+    try:
+        history = get_parking_history(username=username, limit=limit)
+        return {"status": "success", "data": history}
+    except Exception as e:
+        logger.error("GET_PARKING_HISTORY_ERROR username=%s error=%s", username, str(e))
+        raise HTTPException(status_code=500, detail="Failed to fetch parking history")
+
+
+@app.get("/parking_history/admin")
+async def get_admin_parking_history(zone_name: str = None, limit: int = 100):
+    """ดึงประวัติการเข้าจอด (Admin only - แยกตามโซน)"""
+    try:
+        history = get_parking_history(zone_name=zone_name, limit=limit)
+        return {"status": "success", "data": history}
+    except Exception as e:
+        logger.error("GET_ADMIN_PARKING_HISTORY_ERROR zone=%s error=%s", zone_name, str(e))
+        raise HTTPException(status_code=500, detail="Failed to fetch parking history")
 
 
 # WebRTC connections
@@ -457,7 +510,7 @@ cam_manager = CameraStream()
 
 @app.post("/add_camera")
 async def add_camera(data: CameraRegister):
-    success = add_camera_to_db(data.camera_name, data.ip, data.username, data.password)
+    success = add_camera_to_db(data.camera_name, data.ip, data.username, data.password, data.zone_name)
     if success:
         return {"status": "success", "message": "Camera added"}
     raise HTTPException(status_code=500, detail="Failed to add camera")
