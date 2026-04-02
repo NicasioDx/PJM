@@ -4,6 +4,7 @@ import 'dart:convert';
 import '../config/api.dart';
 import '../config/session.dart';
 import '../config/theme_controller.dart';
+import 'admin_login.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -27,10 +28,10 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _login() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
-    final url = Uri.parse('$BASE_URL/login');
+    final url = buildApiUri('/login');
     final response = await http.post(
       url,
-      headers: {'Content-Type': 'application/json'},
+      headers: buildApiHeaders(jsonBody: true),
       body: jsonEncode({
         'username': _userController.text.trim(),
         'password': _passController.text.trim(),
@@ -140,6 +141,16 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ),
         ),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const AdminLoginScreen()),
+          );
+        },
+        icon: const Icon(Icons.admin_panel_settings),
+        label: const Text('Admin'),
       ),
     );
   }

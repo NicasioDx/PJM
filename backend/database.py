@@ -220,7 +220,7 @@ def get_all_cameras():
         try:
             cur = conn.cursor(cursor_factory=RealDictCursor)
             cur.execute(
-                "SELECT id, camera_name, ip_address, created_at "
+                "SELECT id, camera_name, ip_address, zone_name, created_at "
                 "FROM cameras ORDER BY created_at DESC"
             )
             rows = cur.fetchall()
@@ -363,21 +363,26 @@ def get_parking_history(username: str = None, zone_name: str = None, limit: int 
     cur = None
     try:
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        
-        query = "SELECT username, camera_id, zone_name, event_type, created_at FROM parking_history WHERE 1=1"
+
+        query = (
+            "SELECT ph.username, ph.camera_id, c.camera_name, ph.zone_name, ph.event_type, ph.created_at "
+            "FROM parking_history ph "
+            "LEFT JOIN cameras c ON c.id = ph.camera_id "
+            "WHERE 1=1"
+        )
         params = []
-        
+
         if username:
-            query += " AND username=%s"
+            query += " AND ph.username=%s"
             params.append(username)
-        
+
         if zone_name:
-            query += " AND zone_name=%s"
+            query += " AND ph.zone_name=%s"
             params.append(zone_name)
-        
-        query += " ORDER BY created_at DESC LIMIT %s"
+
+        query += " ORDER BY ph.created_at DESC LIMIT %s"
         params.append(limit)
-        
+
         cur.execute(query, tuple(params))
         rows = cur.fetchall()
         return [dict(row) for row in rows]

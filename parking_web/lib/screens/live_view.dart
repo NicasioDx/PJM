@@ -101,9 +101,12 @@ class _LiveViewScreenState extends State<LiveViewScreen> {
 
     try {
       final username = await SessionStore.getUsername();
+      if ((username ?? '').isEmpty) {
+        throw Exception('ไม่พบข้อมูลผู้ใช้ในระบบ');
+      }
       final response = await http.post(
-        Uri.parse('$BASE_URL/parking_history/log'),
-        headers: {'Content-Type': 'application/json'},
+        buildApiUri('/parking_history/log'),
+        headers: buildApiHeaders(jsonBody: true),
         body: jsonEncode({
           'username': username,
           'camera_id': widget.cameraId,

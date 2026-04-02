@@ -43,20 +43,29 @@ class _ParkingHistoryScreenState extends State<ParkingHistoryScreen> {
     });
 
     try {
-      String url;
+      Uri uri;
       if (widget.isAdmin) {
-        // Admin: use /parking_history/admin with optional zone filter
-        url = '$BASE_URL/parking_history/admin';
-        if (zoneFilter != null && zoneFilter.isNotEmpty) {
-          url += '?zone_name=$zoneFilter';
-        }
+        uri = buildApiUri(
+          '/parking_history/admin',
+          queryParameters: {
+            if (zoneFilter != null && zoneFilter.trim().isNotEmpty)
+              'zone_name': zoneFilter.trim(),
+          },
+        );
       } else {
-        // Customer: use /parking_history with their username
         _currentUsername ??= await SessionStore.getUsername();
-        url = '$BASE_URL/parking_history?username=$_currentUsername';
+        if ((_currentUsername ?? '').isEmpty) {
+          throw Exception('ไม่พบข้อมูลผู้ใช้ในระบบ');
+        }
+        uri = buildApiUri(
+          '/parking_history',
+          queryParameters: {
+            'username': _currentUsername!,
+          },
+        );
       }
 
-      final response = await http.get(Uri.parse(url));
+      final response = await http.get(uri, headers: buildApiHeaders());
 
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
@@ -65,8 +74,9 @@ class _ParkingHistoryScreenState extends State<ParkingHistoryScreen> {
           _isLoading = false;
         });
       } else {
+        final body = jsonDecode(response.body);
         setState(() {
-          _error = 'Failed to load history';
+          _error = (body['detail'] ?? 'Failed to load history').toString();
           _isLoading = false;
         });
       }
@@ -148,7 +158,7 @@ class _ParkingHistoryScreenState extends State<ParkingHistoryScreen> {
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        'กล้อง: ${record['camera_id']}',
+                                        'กล้อง: ${record['camera_name'] ?? record['camera_id']}',
                                       ),
                                       Text(
                                         'โซน: ${record['zone_name'] ?? 'ทั่วไป'}',
