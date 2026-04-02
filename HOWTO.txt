@@ -166,5 +166,87 @@ System
 6. เข้าหน้าดูกล้องแบบ live
 
 ==========================================================
+    9) เทรน AI สำหรับจับสถานะที่จอดรถ (YOLOv8)
+==========================================================
+
+ไฟล์ที่เพิ่มให้แล้ว:
+- backend/train_parking_ai.py
+- backend/parking_slots_example.yaml
+
+9.1 โครงสร้าง dataset (YOLO format)
+
+   dataset/parking_slots/
+      images/
+         train/
+         val/
+      labels/
+         train/
+         val/
+
+หมายเหตุ label แต่ละบรรทัด:
+   class_id x_center y_center width height
+ค่าพิกัดต้อง normalize เป็นช่วง 0..1
+
+9.2 ตัวอย่างคลาส
+- 0 = empty (ช่องว่าง)
+- 1 = occupied (มีรถจอด)
+
+9.3 ตั้งค่า dataset yaml
+
+คัดลอกไฟล์ตัวอย่าง:
+   backend/parking_slots_example.yaml
+
+แล้วแก้ path ให้ชี้ไป dataset จริงของคุณ
+
+9.4 คำสั่งเทรน
+
+   cd backend
+   .\venv\Scripts\activate
+   python train_parking_ai.py --data parking_slots_example.yaml --model yolov8n.pt --epochs 100 --imgsz 1280 --batch 8
+
+ไฟล์โมเดลที่ได้จะอยู่ใต้โฟลเดอร์:
+   backend/runs/parking/yolov8_parking/weights/best.pt
+
+9.5 ทิปส์ให้แม่นขึ้นสำหรับมุมกล้องที่จอดรถ
+- เก็บภาพหลายช่วงเวลา: เช้า/บ่าย/เย็น/ฝนตก
+- มีทั้งเงาแรงและแสงจ้า
+- ใส่ภาพที่มีรถจอดทับเส้น/จอดเอียง
+- ให้สัดส่วน empty:occupied สมดุล
+- อย่างน้อย 500-1000 ภาพที่ annotate ดี จะเริ่มเห็นผลชัด
+
+9.6 กรณีโหลด PKLot + CNRPark มาแล้ว (แนะนำเริ่มแบบ Classification)
+
+ไฟล์ที่ใช้:
+- backend/prepare_pklot_cnrpark_cls.py
+- backend/train_parking_cls.py
+
+ขั้นตอน:
+
+1) รวม dataset เป็น format ที่เทรนได้ทันที
+
+   cd backend
+   .\venv\Scripts\activate
+   python prepare_pklot_cnrpark_cls.py --sources "D:\datasets\PKLot" "D:\datasets\CNRPark" --output "..\dataset\parking_cls"
+
+หลังรันเสร็จจะได้โครงสร้าง:
+   dataset/parking_cls/
+      train/empty
+      train/occupied
+      val/empty
+      val/occupied
+
+2) เทรนโมเดล classify ช่องจอด (empty/occupied)
+
+   python train_parking_cls.py --data "..\dataset\parking_cls" --model yolov8n-cls.pt --epochs 50 --imgsz 224 --batch 64
+
+3) ทดสอบโมเดลกับรูปใหม่
+
+   yolo task=classify mode=predict model=runs/parking_cls/yolov8_parking_cls/weights/best.pt source="D:\test_parking_images" save=True
+
+หมายเหตุสำคัญ:
+- PKLot/CNRPark ส่วนใหญ่เป็นภาพ crop ของ "ช่องจอดเดี่ยว" จึงเหมาะกับ classification
+- ถ้าจะใช้กับภาพมุมกว้างทั้งลานจอด ให้กำหนด ROI ของแต่ละช่องก่อน แล้วค่อยส่ง crop แต่ละช่องเข้า classifier
+
+==========================================================
    End
 ==========================================================

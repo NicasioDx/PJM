@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'screens/add_camera.dart';
 import 'screens/camera_list.dart';
 import 'screens/login.dart';
+import 'screens/parking_history.dart';
 import 'screens/register.dart';
 import 'config/session.dart';
 import 'config/theme_controller.dart';
@@ -23,12 +24,30 @@ class ParkingAIApp extends StatelessWidget {
         return MaterialPageRoute(builder: (_) => const RegisterScreen(), settings: settings);
       case '/add':
         return MaterialPageRoute(
-          builder: (_) => RequireAuth(child: AddCameraScreen()),
+          builder: (_) => RequireRole(
+            requiredRole: 'admin',
+            child: AddCameraScreen(),
+          ),
           settings: settings,
         );
       case '/list':
         return MaterialPageRoute(
           builder: (_) => const RequireAuth(child: CameraListScreen()),
+          settings: settings,
+        );
+      case '/history':
+        return MaterialPageRoute(
+          builder: (_) => const RequireAuth(
+            child: ParkingHistoryScreen(isAdmin: false),
+          ),
+          settings: settings,
+        );
+      case '/admin/history':
+        return MaterialPageRoute(
+          builder: (_) => const RequireRole(
+            requiredRole: 'admin',
+            child: ParkingHistoryScreen(isAdmin: true),
+          ),
           settings: settings,
         );
       default:
@@ -130,6 +149,60 @@ class RequireAuth extends StatelessWidget {
             body: Center(child: CircularProgressIndicator()),
           );
         }
+        return child;
+      },
+    );
+  }
+}
+
+class RequireRole extends StatelessWidget {
+  final Widget child;
+  final String requiredRole;
+
+  const RequireRole({
+    super.key,
+    required this.child,
+    required this.requiredRole,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<dynamic>>(
+      future: Future.wait([
+        SessionStore.isLoggedIn(),
+        SessionStore.getRole(),
+      ]),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        final data = snapshot.data ?? [false, 'customer'];
+        final isLoggedIn = (data[0] as bool?) ?? false;
+        final role = (data[1] as String?) ?? 'customer';
+
+        if (!isLoggedIn) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!context.mounted) return;
+            Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+          });
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        if (role.toLowerCase() != requiredRole.toLowerCase()) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!context.mounted) return;
+            Navigator.pushNamedAndRemoveUntil(context, '/list', (route) => false);
+          });
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
         return child;
       },
     );

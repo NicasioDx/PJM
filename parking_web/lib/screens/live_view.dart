@@ -3,7 +3,9 @@ import 'dart:convert';
 import 'dart:async';
 import 'dart:typed_data';
 import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:http/http.dart' as http;
 import '../config/api.dart';
+import '../config/session.dart';
 import '../config/theme_controller.dart';
 
 class LiveViewScreen extends StatefulWidget {
@@ -21,6 +23,7 @@ class _LiveViewScreenState extends State<LiveViewScreen> {
   Uint8List? _currentImage;
   bool _isConnected = false;
   bool _isFullScreen = false;
+  bool _isSavingHistory = false;
   int _retryCount = 0;
   static const int _maxRetries = 5;
   late final String _serverUrl;
@@ -198,6 +201,24 @@ class _LiveViewScreenState extends State<LiveViewScreen> {
                     ),
                   ),
                 ),
+                if (!_isFullScreen)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: _isSavingHistory ? null : _markParkingSuccess,
+                        icon: _isSavingHistory
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.check_circle),
+                        label: Text(_isSavingHistory ? 'กำลังบันทึก...' : 'เข้าจอดสำเร็จ'),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -238,5 +259,53 @@ class _LiveViewScreenState extends State<LiveViewScreen> {
     if (_isConnected) return 'เชื่อมต่อแล้ว';
     if (_retryCount > 0) return 'กำลังเชื่อมต่อ...';
     return 'กำลังโหลด...';
+  }
+
+  Future<void> _markParkingSuccess() async {
+    final username = await SessionStore.getUsername();
+    if (username == null || username.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('ไม่พบข้อมูลผู้ใช้ กรุณาเข้าสู่ระบบใหม่')),
+      );
+      return;
+    }
+
+    setState(() {
+      _isSavingHistory = true;
+    });
+
+    try {
+      final response = await http.post(
+        Uri.parse('$BASE_URL/parking_history/log'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'username': username,
+          'camera_id': widget.cameraId,
+          'event_type': 'parking_success',
+        }),
+      );
+
+      if (!mounted) return;
+      if (response.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('บันทึกประวัติการเข้าจอดแล้ว')),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('บันทึกประวัติไม่สำเร็จ')),
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('เกิดข้อผิดพลาดขณะบันทึกประวัติ')),
+      );
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _isSavingHistory = false;
+      });
+    }
   }
 }
