@@ -4,31 +4,31 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import '../config/api.dart';
-import '../config/session.dart';
 import '../config/theme_controller.dart';
-import 'admin_register.dart';
 
-class AdminLoginScreen extends StatefulWidget {
-  const AdminLoginScreen({super.key});
+class AdminRegisterScreen extends StatefulWidget {
+  const AdminRegisterScreen({super.key});
 
   @override
-  State<AdminLoginScreen> createState() => _AdminLoginScreenState();
+  State<AdminRegisterScreen> createState() => _AdminRegisterScreenState();
 }
 
-class _AdminLoginScreenState extends State<AdminLoginScreen> {
+class _AdminRegisterScreenState extends State<AdminRegisterScreen> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _userController = TextEditingController();
   final TextEditingController _passController = TextEditingController();
+  final TextEditingController _confirmController = TextEditingController();
   bool _isSubmitting = false;
 
   @override
   void dispose() {
     _userController.dispose();
     _passController.dispose();
+    _confirmController.dispose();
     super.dispose();
   }
 
-  Future<void> _loginAdmin() async {
+  Future<void> _submit() async {
     if (!(_formKey.currentState?.validate() ?? false) || _isSubmitting) {
       return;
     }
@@ -39,7 +39,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
 
     try {
       final response = await http.post(
-        buildApiUri('/login'),
+        buildApiUri('/register/admin'),
         headers: buildApiHeaders(jsonBody: true),
         body: jsonEncode({
           'username': _userController.text.trim(),
@@ -47,24 +47,19 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
         }),
       );
 
-      final body = jsonDecode(response.body);
-      if (response.statusCode == 200 && body['role'] == 'admin') {
-        await SessionStore.setLoggedIn(true);
-        await SessionStore.setUsername((body['username'] ?? _userController.text.trim()).toString());
-        await SessionStore.setRole('admin');
+      if (response.statusCode == 200) {
         if (!mounted) {
           return;
         }
-        Navigator.pushNamedAndRemoveUntil(context, '/list', (route) => false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('สร้างบัญชีแอดมินเรียบร้อย')),
+        );
+        Navigator.pop(context);
         return;
       }
 
-      if (response.statusCode == 200) {
-        await SessionStore.clear();
-        throw Exception('บัญชีนี้ไม่มีสิทธิ์ผู้ดูแลระบบ');
-      }
-
-      throw Exception((body['detail'] ?? 'Admin login failed').toString());
+      final body = jsonDecode(response.body);
+      throw Exception((body['detail'] ?? 'Admin register failed').toString());
     } catch (error) {
       if (!mounted) {
         return;
@@ -85,7 +80,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('เข้าสู่ระบบแอดมิน'),
+        title: const Text('สมัครแอดมิน'),
         centerTitle: true,
         actions: const [ThemeModeToggleButton()],
       ),
@@ -107,22 +102,16 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        Icons.admin_panel_settings,
+                        Icons.shield,
                         size: 64,
                         color: Theme.of(context).colorScheme.primary,
                       ),
                       const SizedBox(height: 24),
                       Text(
-                        'เข้าสู่ระบบสำหรับผู้ดูแล',
+                        'สร้างบัญชีผู้ดูแลระบบ',
                         style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                               fontWeight: FontWeight.bold,
                             ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'ใช้สำหรับดูประวัติการเข้าจอดแยกตามโซนและจัดการกล้อง',
-                        style: Theme.of(context).textTheme.bodyMedium,
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 32),
@@ -154,32 +143,38 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                           return null;
                         },
                       ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _confirmController,
+                        decoration: const InputDecoration(
+                          labelText: 'ยืนยันรหัสผ่าน',
+                          prefixIcon: Icon(Icons.lock_outline),
+                        ),
+                        obscureText: true,
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'กรุณายืนยันรหัสผ่าน';
+                          }
+                          if (value != _passController.text) {
+                            return 'รหัสผ่านไม่ตรงกัน';
+                          }
+                          return null;
+                        },
+                      ),
                       const SizedBox(height: 24),
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton.icon(
-                          onPressed: _isSubmitting ? null : _loginAdmin,
+                          onPressed: _isSubmitting ? null : _submit,
                           icon: _isSubmitting
                               ? const SizedBox(
                                   width: 18,
                                   height: 18,
                                   child: CircularProgressIndicator(strokeWidth: 2),
                                 )
-                              : const Icon(Icons.login),
-                          label: Text(_isSubmitting ? 'กำลังตรวจสอบ...' : 'เข้าสู่ระบบแอดมิน'),
+                              : const Icon(Icons.person_add),
+                          label: Text(_isSubmitting ? 'กำลังบันทึก...' : 'สมัครแอดมิน'),
                         ),
-                      ),
-                      const SizedBox(height: 16),
-                      TextButton(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const AdminRegisterScreen(),
-                            ),
-                          );
-                        },
-                        child: const Text('สมัครแอดมิน'),
                       ),
                     ],
                   ),

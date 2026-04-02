@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'screens/add_camera.dart';
 import 'screens/admin_login.dart';
+import 'screens/admin_register.dart';
 import 'screens/camera_list.dart';
 import 'screens/login.dart';
 import 'screens/register.dart';
@@ -25,6 +26,8 @@ class ParkingAIApp extends StatelessWidget {
         return MaterialPageRoute(builder: (_) => const RegisterScreen(), settings: settings);
       case '/admin/login':
         return MaterialPageRoute(builder: (_) => const AdminLoginScreen(), settings: settings);
+      case '/admin/register':
+        return MaterialPageRoute(builder: (_) => const AdminRegisterScreen(), settings: settings);
       case '/add':
         return MaterialPageRoute(
           builder: (_) => RequireRole(requiredRole: 'admin', child: AddCameraScreen()),

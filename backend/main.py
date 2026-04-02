@@ -132,6 +132,26 @@ async def register(data: UserRegister):
     raise HTTPException(status_code=500, detail=result["message"])
 
 
+@app.post("/register/admin")
+async def register_admin(data: UserRegister):
+    result = create_user(data.username, data.password, role="admin")
+
+    if result["status"] == "created":
+        logger.info("REGISTER_ADMIN_SUCCESS username=%s", data.username)
+        return {"status": "success", "message": "Admin registered"}
+
+    if result["status"] == "duplicate":
+        logger.warning("REGISTER_ADMIN_DUPLICATE username=%s", data.username)
+        raise HTTPException(status_code=409, detail=result["message"])
+
+    if result["status"] == "db_unavailable":
+        logger.error("REGISTER_ADMIN_DB_UNAVAILABLE username=%s", data.username)
+        raise HTTPException(status_code=503, detail=result["message"])
+
+    logger.error("REGISTER_ADMIN_DB_ERROR username=%s", data.username)
+    raise HTTPException(status_code=500, detail=result["message"])
+
+
 @app.post("/login")
 async def login(data: UserLogin):
     result = authenticate_user(data.username, data.password)

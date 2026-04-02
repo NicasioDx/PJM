@@ -262,7 +262,7 @@ def get_camera_credentials(camera_id: int):
     return None
 
 
-def create_user(username: str, password: str) -> UserActionResult:
+def create_user(username: str, password: str, role: str = "customer") -> UserActionResult:
     conn = get_connection()
     if not conn:
         return {"status": "db_unavailable", "message": "Database connection is not available"}
@@ -271,8 +271,8 @@ def create_user(username: str, password: str) -> UserActionResult:
         password_hash = hash_password(password)
         cur = conn.cursor()
         cur.execute(
-            "INSERT INTO users (username, password_hash) VALUES (%s, %s)",
-            (username, password_hash),
+            "INSERT INTO users (username, password_hash, role) VALUES (%s, %s, %s)",
+            (username, password_hash, role),
         )
         conn.commit()
         return {"status": "created", "message": "User registered"}
